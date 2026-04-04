@@ -211,3 +211,6 @@ __marimo__/
 
 # Local Conda Envs
 .conda
+
+# Local Runs Data
+.data

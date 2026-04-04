@@ -1,21 +1,22 @@
 # Main
 
+# Global libraries
 import argparse
 import os
 import time
 
-
-def Train(args_namespace):
-    pass
+# Local project libraries
+import multiRotorPlant
+import nnController
+import humanLQI
+import nnTrainingLoop
 
 
 def main():
     parser_argParser = argparse.ArgumentParser()
-    parser_argParser.add_argument()
-    parser_argParser.add_argument("--data_path", type=str, default="./data")
+    parser_argParser.add_argument("--data_path", type=str, default="./.data")
     # parser_argParser.add_argument("--exp_name", type=str, required=True)
     parser_argParser.add_argument("--exp_name", type=str, default="test")
-    # parser_argParser.add_argument("--n_iter", "-n", type=int, default=200)
     args_namespace = parser_argParser.parse_args()
 
     dataPath_str = os.path.join(
@@ -31,7 +32,14 @@ def main():
     if not (os.path.exists(logdir_str)):
         os.makedirs(logdir_str)
 
-    Train(args_namespace)
+    plant = multiRotorPlant.multiRotor6DOFWithXYZPositionError_class()
+    # controller = #pytorch or however controller network is initialized
+
+    # Perform LQI on the Z-axis
+    humanLQI.lqiWithLogRandomSearch(plant, multiRotorPlant.axisEnum_enumClass.VERT)
+
+    # Perform the NN simulation & training loop
+    # nnTrainingLoop.train() # TODO: contents to train function
 
 
 if __name__ == "__main__":
