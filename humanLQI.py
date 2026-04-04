@@ -5,6 +5,7 @@
 # Global libraries
 import control as ct
 import numpy as np
+from matplotlib import pyplot as plt
 
 # Local project libraries
 import multiRotorPlant
@@ -77,7 +78,7 @@ def lqiWithLogRandomSearch(
         lqiActionPenalty_R_matrixFloat_inputsxinputs = np.eye(
             plant_plant.rotorCount_nr_int
         ) * 10 ** np.random.uniform(
-            inLQILogSearchPowerLower_int, inLQILogSearchPowerUpper_int
+            inLQILogSearchPowerLower_int + 1, inLQILogSearchPowerUpper_int + 1
         )
 
         try:
@@ -195,96 +196,163 @@ def lqiWithLogRandomSearch(
     )
 
     # closedLoopSystem_sysCL_ssSys
-    sys_cl_opt = ct.ss(
+    bestClosedLoopSystem_sysCLStar_sysCLCT = ct.ss(
         closedLoopStatesMatrix_Acl_matrixFloat,
         closedLoopInputsMatrix_Bcl_matrixFloat,
         closedLoopOutputsVector_Ccl_vectorFloat,
         0,
     )
 
-    # DEBUG GPT plotting code
-    import matplotlib.pyplot as plt
+    # return (
+    #     ct.step_info(bestClosedLoopSystem_sysCLStar_sysCLCT),
+    #     lqiGainsFinal_Kstar_matrixFloat_3xinputs,
+    # )
 
-    # ── 7b.  Optimal system: step / bode / pole-zero ─────────────────────────────
-    fig_sys, axes_sys = plt.subplots(2, 2, figsize=(14, 10))
-    fig_sys.suptitle(
-        f"Optimal Closed-Loop System)",
-        fontsize=14,
-        fontweight="bold",
+    # DEBUG
+
+    T = np.linspace(0, 10, 10000)
+    U = 1 * np.ones_like(T)
+    X0 = np.zeros(errorAugmentedStateMatrix_Awig_matrixFloat.shape[0])
+
+    T, Y, X = ct.forced_response(
+        bestClosedLoopSystem_sysCLStar_sysCLCT, T, U, X0, return_x=True
     )
 
-    # Step response
-    T_step, y_step = ct.step_response(sys_cl_opt)
-    axes_sys[0, 0].plot(T_step, y_step.flatten(), "b-", linewidth=2)
-    axes_sys[0, 0].axhline(1.0, color="k", linestyle="--", alpha=0.5, label="Setpoint")
-    info_opt = ct.step_info(sys_cl_opt)
-    axes_sys[0, 0].set_title(
-        f"Step Response\n"
-        f"Tr={info_opt['RiseTime']:.3f}s  "
-        f"Ts={info_opt['SettlingTime']:.3f}s  "
-        f"OS={info_opt['Overshoot']:.2f}%"
+    u_tilde = lqiGainsFinal_Kstar_matrixFloat_3xinputs @ X
+    u = u_tilde + plant_plant.rotorHoverThrustPercent_fthov_float
+
+    # T, Y = ct.step_response(bestClosedLoopSystem_sysCLStar_sysCLCT)
+    stepInfo = ct.step_info(bestClosedLoopSystem_sysCLStar_sysCLCT)
+
+    fig, ax = plt.subplots()
+    ax.plot(T, Y, "b-", linewidth=2)
+    ax.axhline(1.0, color="k", linestyle="--", alpha=0.5, label="Step Command")
+    ax.set_title(
+        f"Forced Response U = {U[0]}\n"
+        f"Tr={stepInfo['RiseTime']:.3f}s  "
+        f"Ts={stepInfo['SettlingTime']:.3f}s  "
+        f"OS={stepInfo['Overshoot']:.2f}%"
     )
-    axes_sys[0, 0].set_xlabel("Time (s)")
-    axes_sys[0, 0].set_ylabel("Output")
-    axes_sys[0, 0].legend()
-    axes_sys[0, 0].grid(True, alpha=0.4)
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Output")
+    ax.legend()
+    # ax.grid(True, alpha=0.4)
+    ax.grid()
+    # plt.show()
 
-    # Bode – magnitude
-    omega = np.logspace(-2, 3, 600)
-    mag, phase, omega_out = ct.bode(sys_cl_opt, omega=omega, plot=False)
-    mag_db = 20 * np.log10(mag.flatten())
-    phase_deg = np.degrees(phase.flatten())
+    nrows = int(np.ceil(np.sqrt(plant_plant.rotorCount_nr_int)))
+    ncols = int(np.ceil(plant_plant.rotorCount_nr_int / nrows))
 
-    axes_sys[0, 1].semilogx(omega_out, mag_db, "b-", linewidth=2)
-    axes_sys[0, 1].axhline(-3, color="k", linestyle=":", alpha=0.5, label="−3 dB")
-    axes_sys[0, 1].set_title("Bode – Magnitude")
-    axes_sys[0, 1].set_xlabel("Frequency (rad/s)")
-    axes_sys[0, 1].set_ylabel("Magnitude (dB)")
-    axes_sys[0, 1].legend(fontsize=9)
-    axes_sys[0, 1].grid(True, which="both", alpha=0.4)
-
-    # Bode – phase
-    axes_sys[1, 0].semilogx(omega_out, phase_deg, "r-", linewidth=2)
-    axes_sys[1, 0].axhline(-180, color="k", linestyle="--", alpha=0.5, label="−180°")
-    axes_sys[1, 0].set_title("Bode – Phase")
-    axes_sys[1, 0].set_xlabel("Frequency (rad/s)")
-    axes_sys[1, 0].set_ylabel("Phase (deg)")
-    axes_sys[1, 0].legend(fontsize=9)
-    axes_sys[1, 0].grid(True, which="both", alpha=0.4)
-
-    # Pole-zero map  (closed-loop poles only; no explicit zeros for ss(A_cl,B,C,0))
-    poles = np.linalg.eigvals(closedLoopStatesMatrix_Acl_matrixFloat)
-    axes_sys[1, 1].axvline(0, color="k", linewidth=0.8, alpha=0.4)
-    axes_sys[1, 1].axhline(0, color="k", linewidth=0.8, alpha=0.4)
-    axes_sys[1, 1].scatter(
-        np.real(poles),
-        np.imag(poles),
-        marker="x",
-        s=120,
-        linewidths=2,
-        color="red",
-        zorder=5,
-        label="Poles",
-    )
-    for p in poles:
-        axes_sys[1, 1].annotate(
-            f"({p.real:.2f}{p.imag:+.2f}j)",
-            xy=(p.real, p.imag),
-            xytext=(6, 6),
-            textcoords="offset points",
-            fontsize=7,
+    # fig, axes = plt.subplots(
+    #     nrows=int(np.ceil(np.sqrt(plant_plant.rotorCount_nr_int))),
+    #     ncols=int(np.floor(np.sqrt(plant_plant.rotorCount_nr_int))),
+    # )
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols)
+    axes = axes.flatten()
+    for rotor in range(plant_plant.rotorCount_nr_int):
+        # axes[rotor].plot(T, u[rotor, :], label=f"Rotor {rotor+1}", color=f"C{rotor}")
+        axes[rotor].plot(T, u[rotor, :], color=f"C{rotor}")
+        axes[rotor].axhline(
+            plant_plant.rotorHoverThrustPercent_fthov_float,
+            color="k",
+            linestyle="--",
+            alpha=0.5,
+            label=f"Hover ({plant_plant.rotorHoverThrustPercent_fthov_float})",
         )
-    axes_sys[1, 1].set_title("Pole-Zero Map")
-    axes_sys[1, 1].set_xlabel("Real")
-    axes_sys[1, 1].set_ylabel("Imaginary")
-    axes_sys[1, 1].legend()
-    axes_sys[1, 1].grid(True, alpha=0.4)
-
-    plt.tight_layout()
-    # plt.savefig("lqr_optimal_system.png", dpi=150, bbox_inches="tight")
-    # print("Saved: lqr_optimal_system.png")
-
+        axes[rotor].set_title(f"Rotor {rotor+1}")
+        axes[rotor].legend()
+        axes[rotor].grid()
+    for j in range(rotor + 1, len(axes)):
+        axes[j].axis("off")
+    fig.supxlabel("Time (s)")
+    fig.supylabel("Rotor Input")
+    fig.suptitle("Rotor Commands")
     plt.show()
     # DEBUG
 
-    return
+    # # DEBUG GPT plotting code
+    # import matplotlib.pyplot as plt
+
+    # # ── 7b.  Optimal system: step / bode / pole-zero ─────────────────────────────
+    # fig_sys, axes_sys = plt.subplots(2, 2, figsize=(14, 10))
+    # fig_sys.suptitle(
+    #     f"Optimal Closed-Loop System)",
+    #     fontsize=14,
+    #     fontweight="bold",
+    # )
+
+    # # Step response
+    # T_step, y_step = ct.step_response(bestClosedLoopSystem_sysCLStar_sysCLCT)
+    # axes_sys[0, 0].plot(T_step, y_step.flatten(), "b-", linewidth=2)
+    # axes_sys[0, 0].axhline(1.0, color="k", linestyle="--", alpha=0.5, label="Setpoint")
+    # info_opt = ct.step_info(bestClosedLoopSystem_sysCLStar_sysCLCT)
+    # axes_sys[0, 0].set_title(
+    #     f"Step Response\n"
+    #     f"Tr={info_opt['RiseTime']:.3f}s  "
+    #     f"Ts={info_opt['SettlingTime']:.3f}s  "
+    #     f"OS={info_opt['Overshoot']:.2f}%"
+    # )
+    # axes_sys[0, 0].set_xlabel("Time (s)")
+    # axes_sys[0, 0].set_ylabel("Output")
+    # axes_sys[0, 0].legend()
+    # axes_sys[0, 0].grid(True, alpha=0.4)
+
+    # # Bode – magnitude
+    # omega = np.logspace(-2, 3, 600)
+    # mag, phase, omega_out = ct.bode(
+    #     bestClosedLoopSystem_sysCLStar_sysCLCT, omega=omega, plot=False
+    # )
+    # mag_db = 20 * np.log10(mag.flatten())
+    # phase_deg = np.degrees(phase.flatten())
+
+    # axes_sys[0, 1].semilogx(omega_out, mag_db, "b-", linewidth=2)
+    # axes_sys[0, 1].axhline(-3, color="k", linestyle=":", alpha=0.5, label="−3 dB")
+    # axes_sys[0, 1].set_title("Bode – Magnitude")
+    # axes_sys[0, 1].set_xlabel("Frequency (rad/s)")
+    # axes_sys[0, 1].set_ylabel("Magnitude (dB)")
+    # axes_sys[0, 1].legend(fontsize=9)
+    # axes_sys[0, 1].grid(True, which="both", alpha=0.4)
+
+    # # Bode – phase
+    # axes_sys[1, 0].semilogx(omega_out, phase_deg, "r-", linewidth=2)
+    # axes_sys[1, 0].axhline(-180, color="k", linestyle="--", alpha=0.5, label="−180°")
+    # axes_sys[1, 0].set_title("Bode – Phase")
+    # axes_sys[1, 0].set_xlabel("Frequency (rad/s)")
+    # axes_sys[1, 0].set_ylabel("Phase (deg)")
+    # axes_sys[1, 0].legend(fontsize=9)
+    # axes_sys[1, 0].grid(True, which="both", alpha=0.4)
+
+    # # Pole-zero map  (closed-loop poles only; no explicit zeros for ss(A_cl,B,C,0))
+    # poles = np.linalg.eigvals(closedLoopStatesMatrix_Acl_matrixFloat)
+    # axes_sys[1, 1].axvline(0, color="k", linewidth=0.8, alpha=0.4)
+    # axes_sys[1, 1].axhline(0, color="k", linewidth=0.8, alpha=0.4)
+    # axes_sys[1, 1].scatter(
+    #     np.real(poles),
+    #     np.imag(poles),
+    #     marker="x",
+    #     s=120,
+    #     linewidths=2,
+    #     color="red",
+    #     zorder=5,
+    #     label="Poles",
+    # )
+    # for p in poles:
+    #     axes_sys[1, 1].annotate(
+    #         f"({p.real:.2f}{p.imag:+.2f}j)",
+    #         xy=(p.real, p.imag),
+    #         xytext=(6, 6),
+    #         textcoords="offset points",
+    #         fontsize=7,
+    #     )
+    # axes_sys[1, 1].set_title("Pole-Zero Map")
+    # axes_sys[1, 1].set_xlabel("Real")
+    # axes_sys[1, 1].set_ylabel("Imaginary")
+    # axes_sys[1, 1].legend()
+    # axes_sys[1, 1].grid(True, alpha=0.4)
+
+    # plt.tight_layout()
+    # # plt.savefig("lqr_optimal_system.png", dpi=150, bbox_inches="tight")
+    # # print("Saved: lqr_optimal_system.png")
+
+    # plt.show()
+    # # DEBUG

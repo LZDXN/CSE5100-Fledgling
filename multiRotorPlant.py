@@ -65,18 +65,13 @@ class multiRotor6DOFWithXYZPositionError_class:
         self.rotorEqualSpreadAngle_rphi_float = 360 / self.rotorCount_nr_int
         # Assuming "X" config for 4 rotors, and for odd number of pairs prefer extra
         # rotors along longitudinal axis for more "forward" authority
-        if self.rotorCount_nr_int % 2 == 0:
+        if self.rotorCount_nr_int / 2 % 2 == 0:
             self.rotorFirstRotorAngleOffsetFromPlusX = (
                 self.rotorEqualSpreadAngle_rphi_float / 2
             )
         else:
             self.rotorFirstRotorAngleOffsetFromPlusX = 0
         self.rotorLeverArmRadiusToCG_drr_float = rotorLeverArmRadiusToCG_drr_float
-        # # TODO:REMOVE AFTER TESTING
-        # self.rotorLeverArmRadiusToCG_drr_float = 1 / np.sin(
-        #     360 / self.rotorCount_nr_int / 2 * np.pi / 180
-        # )
-        # # TODO:REMOVE AFTER TESTING
 
         # Build rotor information matrix in cartesian offsets in body frame in format:
         # [[X
@@ -171,10 +166,15 @@ class multiRotor6DOFWithXYZPositionError_class:
         # Small-angle coupling
         self.ssStatesPositionFacingErrorAugmented_Apwig_matrixFloat_16x16[
             self.pitchLonIdxs_slice[2], self.pitchLonIdxs_slice[3]
-        ] = envLocalGravity_g_float
-        self.ssStatesPositionFacingErrorAugmented_Apwig_matrixFloat_16x16[
+        ] = self.ssStatesPositionFacingErrorAugmented_Apwig_matrixFloat_16x16[
             self.rollLatIdxs_slice[2], self.rollLatIdxs_slice[3]
-        ] = -envLocalGravity_g_float
+        ] = envLocalGravity_g_float
+        # self.ssStatesPositionFacingErrorAugmented_Apwig_matrixFloat_16x16[
+        #     self.pitchLonIdxs_slice[2], self.pitchLonIdxs_slice[3]
+        # ] = envLocalGravity_g_float
+        # self.ssStatesPositionFacingErrorAugmented_Apwig_matrixFloat_16x16[
+        #     self.rollLatIdxs_slice[2], self.rollLatIdxs_slice[3]
+        # ] = -envLocalGravity_g_float
 
         # Pose Integrators
         self.ssStatesPositionFacingErrorAugmented_Apwig_matrixFloat_16x16[
@@ -258,7 +258,7 @@ class multiRotor6DOFWithXYZPositionError_class:
         self.ssInputsPositionFacingErrorAugmented_Bpwig_matrixFloat_16xnrotors[
             15, :
         ] = (
-            -self.rotorInformationMatrix_matrixFloat[  # plus CCW motors to positive yaw motion
+            self.rotorInformationMatrix_matrixFloat[  # plus CCW motors to positive yaw motion
                 -1, :
             ]
             * self.vehicleMass_mv_float

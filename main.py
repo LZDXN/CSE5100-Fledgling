@@ -5,11 +5,18 @@ import argparse
 import os
 import time
 
+# # Local project libraries
+# import multiRotorPlant
+# import nnController
+# import humanLQI
+# import nnTrainingLoop
+
+# DEBUG
 # Local project libraries
 import multiRotorPlant
-import nnController
 import humanLQI
-import nnTrainingLoop
+
+# DEBUG
 
 
 def main():
@@ -33,10 +40,47 @@ def main():
         os.makedirs(logdir_str)
 
     plant = multiRotorPlant.multiRotor6DOFWithXYZPositionError_class()
+    # plant = multiRotorPlant.multiRotor6DOFWithXYZPositionError_class(
+    #     rotorCount_nr_int=6
+    # )
+    # plant = multiRotorPlant.multiRotor6DOFWithXYZPositionError_class(
+    #     rotorCount_nr_int=8
+    # )
+
     # controller = #pytorch or however controller network is initialized
 
-    # Perform LQI on the Z-axis
-    humanLQI.lqiWithLogRandomSearch(plant, multiRotorPlant.axisEnum_enumClass.VERT)
+    # Perform LQI
+    humanLQI.lqiWithLogRandomSearch(
+        plant,
+        multiRotorPlant.axisEnum_enumClass.VERT,
+        overshootHardRejectPercent_float=0.01,
+        riseTimeHardRejectSeconds_float=5,
+        settlingTimeHardRejectSeconds_float=5,
+    )
+
+    # humanLQI.lqiWithLogRandomSearch(
+    #     plant,
+    #     multiRotorPlant.axisEnum_enumClass.PITCHLON,
+    #     overshootHardRejectPercent_float=0.01,
+    #     riseTimeHardRejectSeconds_float=5,
+    #     settlingTimeHardRejectSeconds_float=5,
+    # )
+
+    # humanLQI.lqiWithLogRandomSearch(
+    #     plant,
+    #     multiRotorPlant.axisEnum_enumClass.ROLLLAT,
+    #     overshootHardRejectPercent_float=0.01,
+    #     riseTimeHardRejectSeconds_float=5,
+    #     settlingTimeHardRejectSeconds_float=5,
+    # )
+
+    # humanLQI.lqiWithLogRandomSearch(
+    #     plant,
+    #     multiRotorPlant.axisEnum_enumClass.YAWHDG,
+    #     overshootHardRejectPercent_float=0.01,
+    #     riseTimeHardRejectSeconds_float=5,
+    #     settlingTimeHardRejectSeconds_float=5,
+    # )
 
     # Perform the NN simulation & training loop for the Z-axis
     # nnTrainingLoop.train() # TODO: contents to train function
