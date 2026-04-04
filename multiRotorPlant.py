@@ -288,16 +288,16 @@ class multiRotor6DOFWithXYZPositionError_class:
         # DEBUG
 
     def plantAxisHandler(
-        self, axis: axisEnum_enumClass, obsIdxs: np.array = None
+        self, axis: axisEnum_enumClass.name, obsIdxs: np.array = None
     ) -> tuple:
         match axis:
-            case 0:
+            case axisEnum_enumClass.PITCHLON:
                 axisIdxs_listInt = list(self.pitchLonIdxs_slice)
-            case 1:
+            case axisEnum_enumClass.ROLLLAT:
                 axisIdxs_listInt = list(self.rollLatIdxs_slice)
-            case 2:
+            case axisEnum_enumClass.VERT:
                 axisIdxs_listInt = list(self.vertIdxs_slice)
-            case 3:
+            case axisEnum_enumClass.YAWHDG:
                 axisIdxs_listInt = list(self.yawIdxs_slice)
             case _:
                 raise ValueError(
