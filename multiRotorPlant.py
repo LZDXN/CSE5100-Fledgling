@@ -10,6 +10,13 @@ from enum import Enum
 # Local project libraries
 
 
+class axisEnum_enumClass(Enum):
+    PITCHLON = 0
+    ROLLLAT = 1
+    VERT = 2
+    YAWHDG = 3
+
+
 class multiRotor6DOFWithXYZPositionError_class:
     def __init__(
         self,
@@ -279,12 +286,6 @@ class multiRotor6DOFWithXYZPositionError_class:
             )
         )
         # DEBUG
-
-    class axisEnum_enumClass(Enum):
-        PITCHLON = 0
-        ROLLLAT = 1
-        VERT = 2
-        YAWHDG = 3
 
     def plantAxisHandler(
         self, axis: axisEnum_enumClass, obsIdxs: np.array = None

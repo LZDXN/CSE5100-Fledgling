@@ -38,7 +38,7 @@ def main():
     # Perform LQI on the Z-axis
     humanLQI.lqiWithLogRandomSearch(plant, multiRotorPlant.axisEnum_enumClass.VERT)
 
-    # Perform the NN simulation & training loop
+    # Perform the NN simulation & training loop for the Z-axis
     # nnTrainingLoop.train() # TODO: contents to train function
 
 
