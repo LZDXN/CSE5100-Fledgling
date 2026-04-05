@@ -268,6 +268,8 @@ def lqiWithLogRandomSearch(
     fig.supylabel("Rotor Input")
     fig.suptitle("Rotor Commands")
     plt.show()
+
+    return bestLQIQ_Qstar_matrixFloat, bestLQIR_Rstar_matrixFloat
     # DEBUG
 
     # # DEBUG GPT plotting code

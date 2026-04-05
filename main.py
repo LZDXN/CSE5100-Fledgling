@@ -85,6 +85,12 @@ def main():
     # Perform the NN simulation & training loop for the Z-axis
     # nnTrainingLoop.train() # TODO: contents to train function
 
+    # DEBUG
+    import discreteTimeSim
+
+    discreteTimeSim.simRun(plant, multiRotorPlant.axisEnum_enumClass.VERT)
+    # DEBUG
+
 
 if __name__ == "__main__":
     main()
