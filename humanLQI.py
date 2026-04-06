@@ -5,10 +5,11 @@
 # Global libraries
 import control as ct
 import numpy as np
-from matplotlib import pyplot as plt
 
 # Local project libraries
 import multiRotorPlant
+import lqiPlots
+import trainingArtifacts
 
 
 def lqiWithLogRandomSearch(
@@ -22,6 +23,7 @@ def lqiWithLogRandomSearch(
     overshootHardRejectPercent_float: float = 0.01,
     riseTimeHardRejectSeconds_float: float = 5,
     settlingTimeHardRejectSeconds_float: float = 10,
+    saveDir: str = None,
 ):
     # Full plant is already in terms of Awiggle, so section out portion relevant from axis as open-loop system matrices
     (
@@ -209,7 +211,6 @@ def lqiWithLogRandomSearch(
     # )
 
     # DEBUG
-
     T = np.linspace(0, 10, 10000)
     U = 1 * np.ones_like(T)
     X0 = np.zeros(errorAugmentedStateMatrix_Awig_matrixFloat.shape[0])
@@ -221,55 +222,67 @@ def lqiWithLogRandomSearch(
     u_tilde = lqiGainsFinal_Kstar_matrixFloat_3xinputs @ X
     u = u_tilde + plant_plant.rotorHoverThrustPercent_fthov_float
 
-    # T, Y = ct.step_response(bestClosedLoopSystem_sysCLStar_sysCLCT)
     stepInfo = ct.step_info(bestClosedLoopSystem_sysCLStar_sysCLCT)
 
-    fig, ax = plt.subplots()
-    ax.plot(T, Y, "b-", linewidth=2)
-    ax.axhline(1.0, color="k", linestyle="--", alpha=0.5, label="Step Command")
-    ax.set_title(
-        f"Forced Response U = {U[0]}\n"
-        f"Tr={stepInfo['RiseTime']:.3f}s  "
-        f"Ts={stepInfo['SettlingTime']:.3f}s  "
-        f"OS={stepInfo['Overshoot']:.2f}%"
-    )
-    ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Output")
-    ax.legend()
-    # ax.grid(True, alpha=0.4)
-    ax.grid()
-    # plt.show()
+    lqiPlots.plotLqiDebug(T, Y, u, stepInfo, plant_plant, saveDir=saveDir or "/tmp")
 
-    nrows = int(np.ceil(np.sqrt(plant_plant.rotorCount_nr_int)))
-    ncols = int(np.ceil(plant_plant.rotorCount_nr_int / nrows))
-
-    # fig, axes = plt.subplots(
-    #     nrows=int(np.ceil(np.sqrt(plant_plant.rotorCount_nr_int))),
-    #     ncols=int(np.floor(np.sqrt(plant_plant.rotorCount_nr_int))),
-    # )
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols)
-    axes = axes.flatten()
-    for rotor in range(plant_plant.rotorCount_nr_int):
-        # axes[rotor].plot(T, u[rotor, :], label=f"Rotor {rotor+1}", color=f"C{rotor}")
-        axes[rotor].plot(T, u[rotor, :], color=f"C{rotor}")
-        axes[rotor].axhline(
-            plant_plant.rotorHoverThrustPercent_fthov_float,
-            color="k",
-            linestyle="--",
-            alpha=0.5,
-            label=f"Hover ({plant_plant.rotorHoverThrustPercent_fthov_float})",
+    if saveDir is not None:
+        trainingArtifacts.saveLQIModel(
+            lqiGainsFinal_Kstar_matrixFloat_3xinputs,
+            bestLQIQ_Qstar_matrixFloat,
+            bestLQIR_Rstar_matrixFloat,
+            stepInfo,
+            saveDir,
         )
-        axes[rotor].set_title(f"Rotor {rotor+1}")
-        axes[rotor].legend()
-        axes[rotor].grid()
-    for j in range(rotor + 1, len(axes)):
-        axes[j].axis("off")
-    fig.supxlabel("Time (s)")
-    fig.supylabel("Rotor Input")
-    fig.suptitle("Rotor Commands")
-    plt.show()
+#     # T, Y = ct.step_response(bestClosedLoopSystem_sysCLStar_sysCLCT)
+#     stepInfo = ct.step_info(bestClosedLoopSystem_sysCLStar_sysCLCT)
 
-    return bestLQIQ_Qstar_matrixFloat, bestLQIR_Rstar_matrixFloat
+#     fig, ax = plt.subplots()
+#     ax.plot(T, Y, "b-", linewidth=2)
+#     ax.axhline(1.0, color="k", linestyle="--", alpha=0.5, label="Step Command")
+#     ax.set_title(
+#         f"Forced Response U = {U[0]}\n"
+#         f"Tr={stepInfo['RiseTime']:.3f}s  "
+#         f"Ts={stepInfo['SettlingTime']:.3f}s  "
+#         f"OS={stepInfo['Overshoot']:.2f}%"
+#     )
+#     ax.set_xlabel("Time (s)")
+#     ax.set_ylabel("Output")
+#     ax.legend()
+#     # ax.grid(True, alpha=0.4)
+#     ax.grid()
+#     # plt.show()
+
+#     nrows = int(np.ceil(np.sqrt(plant_plant.rotorCount_nr_int)))
+#     ncols = int(np.ceil(plant_plant.rotorCount_nr_int / nrows))
+
+#     # fig, axes = plt.subplots(
+#     #     nrows=int(np.ceil(np.sqrt(plant_plant.rotorCount_nr_int))),
+#     #     ncols=int(np.floor(np.sqrt(plant_plant.rotorCount_nr_int))),
+#     # )
+#     fig, axes = plt.subplots(nrows=nrows, ncols=ncols)
+#     axes = axes.flatten()
+#     for rotor in range(plant_plant.rotorCount_nr_int):
+#         # axes[rotor].plot(T, u[rotor, :], label=f"Rotor {rotor+1}", color=f"C{rotor}")
+#         axes[rotor].plot(T, u[rotor, :], color=f"C{rotor}")
+#         axes[rotor].axhline(
+#             plant_plant.rotorHoverThrustPercent_fthov_float,
+#             color="k",
+#             linestyle="--",
+#             alpha=0.5,
+#             label=f"Hover ({plant_plant.rotorHoverThrustPercent_fthov_float})",
+#         )
+#         axes[rotor].set_title(f"Rotor {rotor+1}")
+#         axes[rotor].legend()
+#         axes[rotor].grid()
+#     for j in range(rotor + 1, len(axes)):
+#         axes[j].axis("off")
+#     fig.supxlabel("Time (s)")
+#     fig.supylabel("Rotor Input")
+#     fig.suptitle("Rotor Commands")
+#     plt.show()
+
+#     return bestLQIQ_Qstar_matrixFloat, bestLQIR_Rstar_matrixFloat
     # DEBUG
 
     # # DEBUG GPT plotting code

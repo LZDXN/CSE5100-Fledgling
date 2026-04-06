@@ -213,4 +213,5 @@ __marimo__/
 .conda
 
 # Local Runs Data
-.data
+.data/*
+data/*
