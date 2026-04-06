@@ -234,6 +234,55 @@ def lqiWithLogRandomSearch(
             stepInfo,
             saveDir,
         )
+#     # T, Y = ct.step_response(bestClosedLoopSystem_sysCLStar_sysCLCT)
+#     stepInfo = ct.step_info(bestClosedLoopSystem_sysCLStar_sysCLCT)
+
+#     fig, ax = plt.subplots()
+#     ax.plot(T, Y, "b-", linewidth=2)
+#     ax.axhline(1.0, color="k", linestyle="--", alpha=0.5, label="Step Command")
+#     ax.set_title(
+#         f"Forced Response U = {U[0]}\n"
+#         f"Tr={stepInfo['RiseTime']:.3f}s  "
+#         f"Ts={stepInfo['SettlingTime']:.3f}s  "
+#         f"OS={stepInfo['Overshoot']:.2f}%"
+#     )
+#     ax.set_xlabel("Time (s)")
+#     ax.set_ylabel("Output")
+#     ax.legend()
+#     # ax.grid(True, alpha=0.4)
+#     ax.grid()
+#     # plt.show()
+
+#     nrows = int(np.ceil(np.sqrt(plant_plant.rotorCount_nr_int)))
+#     ncols = int(np.ceil(plant_plant.rotorCount_nr_int / nrows))
+
+#     # fig, axes = plt.subplots(
+#     #     nrows=int(np.ceil(np.sqrt(plant_plant.rotorCount_nr_int))),
+#     #     ncols=int(np.floor(np.sqrt(plant_plant.rotorCount_nr_int))),
+#     # )
+#     fig, axes = plt.subplots(nrows=nrows, ncols=ncols)
+#     axes = axes.flatten()
+#     for rotor in range(plant_plant.rotorCount_nr_int):
+#         # axes[rotor].plot(T, u[rotor, :], label=f"Rotor {rotor+1}", color=f"C{rotor}")
+#         axes[rotor].plot(T, u[rotor, :], color=f"C{rotor}")
+#         axes[rotor].axhline(
+#             plant_plant.rotorHoverThrustPercent_fthov_float,
+#             color="k",
+#             linestyle="--",
+#             alpha=0.5,
+#             label=f"Hover ({plant_plant.rotorHoverThrustPercent_fthov_float})",
+#         )
+#         axes[rotor].set_title(f"Rotor {rotor+1}")
+#         axes[rotor].legend()
+#         axes[rotor].grid()
+#     for j in range(rotor + 1, len(axes)):
+#         axes[j].axis("off")
+#     fig.supxlabel("Time (s)")
+#     fig.supylabel("Rotor Input")
+#     fig.suptitle("Rotor Commands")
+#     plt.show()
+
+#     return bestLQIQ_Qstar_matrixFloat, bestLQIR_Rstar_matrixFloat
     # DEBUG
 
     # # DEBUG GPT plotting code

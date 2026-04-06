@@ -192,3 +192,8 @@ def plotLqrVsRl(lqrTraj, rlTraj, zCmd, savePath):
     fig.tight_layout()
     fig.savefig(savePath, dpi=150)
     plt.close(fig)
+
+# Local project libraries
+
+# plt.rcParams["text.usetex"] = True
+# plt.rcParams["figure.constrained_layout.use"] = True

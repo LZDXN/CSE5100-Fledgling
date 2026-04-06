@@ -3,7 +3,8 @@
 # Global libraries
 import control as ct
 import numpy as np
-import torch  # ???
+
+import torch
 
 # Local project libraries
 import multiRotorPlant
@@ -17,6 +18,7 @@ def simStep(
     ydata,
     udata,
     step=0,
+#     maxSteps=1,
 ):
     A, B, C, E = plant
     ydata[step] = C @ xdata[step]
@@ -72,3 +74,74 @@ def simRun(
 
     for step in range(simDiscreteSteps_N_U_int):
         simStep(discretePlant, controller, referenceCommand, xdata, ydata, udata, step)
+#     # DEBUG
+#     import humanLQI
+
+#     Qstar, Rstar = humanLQI.lqiWithLogRandomSearch(
+#         plant_plant,
+#         axis_axisEnum,
+#         overshootHardRejectPercent_float=0.01,
+#         riseTimeHardRejectSeconds_float=5,
+#         settlingTimeHardRejectSeconds_float=5,
+#     )
+
+#     controller, *_ = ct.dlqr(discretePlant[0], discretePlant[1], Qstar, Rstar)
+#     # DEBUG
+
+#     for step in range(simDiscreteSteps_N_U_int):
+#         simStep(
+#             discretePlant,
+#             controller,
+#             referenceCommand,
+#             xdata,
+#             ydata,
+#             udata,
+#             step,
+#             simDiscreteSteps_N_U_int,
+#         )
+
+#     # DEBUG
+#     from matplotlib import pyplot as plt
+
+#     u_tilde = controller @ xdata.T
+#     u = u_tilde + plant_plant.rotorHoverThrustPercent_fthov_float
+
+#     fig, ax = plt.subplots()
+#     ax.plot(tdata, ydata.T[1], "b-", linewidth=2)
+#     ax.axhline(1.0, color="k", linestyle="--", alpha=0.5, label="Step Command")
+#     ax.set_title(f"Forced Response U = {referenceCommand[0].item()}")
+#     ax.set_xlabel("Sim Steps")
+#     ax.set_ylabel("Output")
+#     ax.legend()
+#     # ax.grid(True, alpha=0.4)
+#     ax.grid()
+#     # plt.show()
+
+#     nrows = int(np.ceil(np.sqrt(plant_plant.rotorCount_nr_int)))
+#     ncols = int(np.ceil(plant_plant.rotorCount_nr_int / nrows))
+
+#     # fig, axes = plt.subplots(
+#     #     nrows=int(np.ceil(np.sqrt(plant_plant.rotorCount_nr_int))),
+#     #     ncols=int(np.floor(np.sqrt(plant_plant.rotorCount_nr_int))),
+#     # )
+#     fig, axes = plt.subplots(nrows=nrows, ncols=ncols)
+#     axes = axes.flatten()
+#     for rotor in range(plant_plant.rotorCount_nr_int):
+#         # axes[rotor].plot(T, u[rotor, :], label=f"Rotor {rotor+1}", color=f"C{rotor}")
+#         axes[rotor].plot(tdata, u[rotor, :], color=f"C{rotor}")
+#         axes[rotor].axhline(
+#             plant_plant.rotorHoverThrustPercent_fthov_float,
+#             color="k",
+#             linestyle="--",
+#             alpha=0.5,
+#             label=f"Hover ({plant_plant.rotorHoverThrustPercent_fthov_float})",
+#         )
+#         axes[rotor].set_title(f"Rotor {rotor+1}")
+#         axes[rotor].legend()
+#         axes[rotor].grid()
+#     for j in range(rotor + 1, len(axes)):
+#         axes[j].axis("off")
+#     fig.supxlabel("Sim Steps")
+#     fig.supylabel("Rotor Input")
+#     fig.suptitle("Rotor Commands")
+#     plt.show()
