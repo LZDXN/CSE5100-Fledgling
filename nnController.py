@@ -37,9 +37,11 @@ class ActorMLP(nn.Module):
 
         # μ_θ(s): unbounded mean, no final activation
         self.net = nn.Sequential(
-            nn.Linear(obs_dim, hidden),  nn.Tanh(),
-            nn.Linear(hidden,  hidden),  nn.Tanh(),
-            nn.Linear(hidden,  action_dim),
+            nn.Linear(obs_dim, hidden),
+            nn.Tanh(),
+            nn.Linear(hidden, hidden),
+            nn.Tanh(),
+            nn.Linear(hidden, action_dim),
         )
         # Hidden layers: scale = sqrt(2) recommended for Tanh activations
         # Output layer: scale = 0.01 → tiny initial mean → near-zero actions at init
@@ -107,9 +109,11 @@ class CriticMLP(nn.Module):
         super().__init__()
 
         self.net = nn.Sequential(
-            nn.Linear(obs_dim, hidden), nn.Tanh(),
-            nn.Linear(hidden,  hidden), nn.Tanh(),
-            nn.Linear(hidden,  1),
+            nn.Linear(obs_dim, hidden),
+            nn.Tanh(),
+            nn.Linear(hidden, hidden),
+            nn.Tanh(),
+            nn.Linear(hidden, 1),
         )
         # Hidden: scale = sqrt(2) for Tanh; output: scale = 1.0 (standard value init)
         _orthogonalInit(self.net[0], scale=np.sqrt(2))

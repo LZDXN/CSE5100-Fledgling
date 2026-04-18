@@ -8,6 +8,7 @@ import numpy as np
 from enum import Enum
 
 # Local project libraries
+# N/A
 
 
 class axisEnum_enumClass(Enum):
@@ -150,7 +151,9 @@ class multiRotor6DOFWithXYZPositionError_class:
             self.vertIdxs_slice[0], self.vertIdxs_slice[1]
         ] = self.ssStatesPositionFacingErrorAugmented_Apwig_matrixFloat_16x16[
             self.yawIdxs_slice[0], self.yawIdxs_slice[1]
-        ] = -1
+        # ] = -1
+        ] = 1
+
 
         # Position Integrators
         self.ssStatesPositionFacingErrorAugmented_Apwig_matrixFloat_16x16[
@@ -288,8 +291,9 @@ class multiRotor6DOFWithXYZPositionError_class:
         # DEBUG
 
     def plantAxisHandler(
-        self, axis: axisEnum_enumClass, obsIdxs: np.array = None
-#         self, axis: axisEnum_enumClass.name, obsIdxs: np.array = None
+        self,
+        axis: axisEnum_enumClass,
+        obsIdxs: np.array = None,
     ) -> tuple:
         match axis:
             case axisEnum_enumClass.PITCHLON:
@@ -333,7 +337,7 @@ class multiRotor6DOFWithXYZPositionError_class:
         errorReferenceVector_Ewig_vectorFloat = np.zeros(
             (errorAugmentedStateMatrix_Awig_matrixFloat.shape[0], 1)
         )
-        errorReferenceVector_Ewig_vectorFloat[0] = 1
+        errorReferenceVector_Ewig_vectorFloat[0] = -1
 
         return (
             errorAugmentedStateMatrix_Awig_matrixFloat,

@@ -18,7 +18,7 @@ def simStep(
     ydata,
     udata,
     step=0,
-#     maxSteps=1,
+    #     maxSteps=1,
 ):
     A, B, C, E = plant
     ydata[step] = C @ xdata[step]
@@ -74,6 +74,8 @@ def simRun(
 
     for step in range(simDiscreteSteps_N_U_int):
         simStep(discretePlant, controller, referenceCommand, xdata, ydata, udata, step)
+
+
 #     # DEBUG
 #     import humanLQI
 

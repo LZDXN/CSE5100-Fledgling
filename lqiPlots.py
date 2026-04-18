@@ -4,6 +4,9 @@ from matplotlib import pyplot as plt
 import numpy as np
 import os
 
+# plt.rcParams["text.usetex"] = True
+# plt.rcParams["figure.constrained_layout.use"] = True
+
 
 def plotLqiDebug(T, Y, u, stepInfo, plant, saveDir="/tmp"):
     # Step response plot
@@ -20,6 +23,7 @@ def plotLqiDebug(T, Y, u, stepInfo, plant, saveDir="/tmp"):
     ax.set_ylabel("Output")
     ax.legend()
     ax.grid()
+    fig.set_size_inches(11, 8.5)
     fig.savefig(os.path.join(saveDir, "lqi_step_response.png"), dpi=150)
     plt.close(fig)
 
@@ -47,5 +51,6 @@ def plotLqiDebug(T, Y, u, stepInfo, plant, saveDir="/tmp"):
     fig2.supxlabel("Time (s)")
     fig2.supylabel("Rotor Input")
     fig2.suptitle("Rotor Commands")
+    fig2.set_size_inches(11, 8.5)
     fig2.savefig(os.path.join(saveDir, "lqi_rotor_commands.png"), dpi=150)
     plt.close(fig2)

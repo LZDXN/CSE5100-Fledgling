@@ -234,6 +234,8 @@ def lqiWithLogRandomSearch(
             stepInfo,
             saveDir,
         )
+
+
 #     # T, Y = ct.step_response(bestClosedLoopSystem_sysCLStar_sysCLCT)
 #     stepInfo = ct.step_info(bestClosedLoopSystem_sysCLStar_sysCLCT)
 
@@ -283,91 +285,91 @@ def lqiWithLogRandomSearch(
 #     plt.show()
 
 #     return bestLQIQ_Qstar_matrixFloat, bestLQIR_Rstar_matrixFloat
-    # DEBUG
+# DEBUG
 
-    # # DEBUG GPT plotting code
-    # import matplotlib.pyplot as plt
+# # DEBUG GPT plotting code
+# import matplotlib.pyplot as plt
 
-    # # ── 7b.  Optimal system: step / bode / pole-zero ─────────────────────────────
-    # fig_sys, axes_sys = plt.subplots(2, 2, figsize=(14, 10))
-    # fig_sys.suptitle(
-    #     f"Optimal Closed-Loop System)",
-    #     fontsize=14,
-    #     fontweight="bold",
-    # )
+# # ── 7b.  Optimal system: step / bode / pole-zero ─────────────────────────────
+# fig_sys, axes_sys = plt.subplots(2, 2, figsize=(14, 10))
+# fig_sys.suptitle(
+#     f"Optimal Closed-Loop System)",
+#     fontsize=14,
+#     fontweight="bold",
+# )
 
-    # # Step response
-    # T_step, y_step = ct.step_response(bestClosedLoopSystem_sysCLStar_sysCLCT)
-    # axes_sys[0, 0].plot(T_step, y_step.flatten(), "b-", linewidth=2)
-    # axes_sys[0, 0].axhline(1.0, color="k", linestyle="--", alpha=0.5, label="Setpoint")
-    # info_opt = ct.step_info(bestClosedLoopSystem_sysCLStar_sysCLCT)
-    # axes_sys[0, 0].set_title(
-    #     f"Step Response\n"
-    #     f"Tr={info_opt['RiseTime']:.3f}s  "
-    #     f"Ts={info_opt['SettlingTime']:.3f}s  "
-    #     f"OS={info_opt['Overshoot']:.2f}%"
-    # )
-    # axes_sys[0, 0].set_xlabel("Time (s)")
-    # axes_sys[0, 0].set_ylabel("Output")
-    # axes_sys[0, 0].legend()
-    # axes_sys[0, 0].grid(True, alpha=0.4)
+# # Step response
+# T_step, y_step = ct.step_response(bestClosedLoopSystem_sysCLStar_sysCLCT)
+# axes_sys[0, 0].plot(T_step, y_step.flatten(), "b-", linewidth=2)
+# axes_sys[0, 0].axhline(1.0, color="k", linestyle="--", alpha=0.5, label="Setpoint")
+# info_opt = ct.step_info(bestClosedLoopSystem_sysCLStar_sysCLCT)
+# axes_sys[0, 0].set_title(
+#     f"Step Response\n"
+#     f"Tr={info_opt['RiseTime']:.3f}s  "
+#     f"Ts={info_opt['SettlingTime']:.3f}s  "
+#     f"OS={info_opt['Overshoot']:.2f}%"
+# )
+# axes_sys[0, 0].set_xlabel("Time (s)")
+# axes_sys[0, 0].set_ylabel("Output")
+# axes_sys[0, 0].legend()
+# axes_sys[0, 0].grid(True, alpha=0.4)
 
-    # # Bode – magnitude
-    # omega = np.logspace(-2, 3, 600)
-    # mag, phase, omega_out = ct.bode(
-    #     bestClosedLoopSystem_sysCLStar_sysCLCT, omega=omega, plot=False
-    # )
-    # mag_db = 20 * np.log10(mag.flatten())
-    # phase_deg = np.degrees(phase.flatten())
+# # Bode – magnitude
+# omega = np.logspace(-2, 3, 600)
+# mag, phase, omega_out = ct.bode(
+#     bestClosedLoopSystem_sysCLStar_sysCLCT, omega=omega, plot=False
+# )
+# mag_db = 20 * np.log10(mag.flatten())
+# phase_deg = np.degrees(phase.flatten())
 
-    # axes_sys[0, 1].semilogx(omega_out, mag_db, "b-", linewidth=2)
-    # axes_sys[0, 1].axhline(-3, color="k", linestyle=":", alpha=0.5, label="−3 dB")
-    # axes_sys[0, 1].set_title("Bode – Magnitude")
-    # axes_sys[0, 1].set_xlabel("Frequency (rad/s)")
-    # axes_sys[0, 1].set_ylabel("Magnitude (dB)")
-    # axes_sys[0, 1].legend(fontsize=9)
-    # axes_sys[0, 1].grid(True, which="both", alpha=0.4)
+# axes_sys[0, 1].semilogx(omega_out, mag_db, "b-", linewidth=2)
+# axes_sys[0, 1].axhline(-3, color="k", linestyle=":", alpha=0.5, label="−3 dB")
+# axes_sys[0, 1].set_title("Bode – Magnitude")
+# axes_sys[0, 1].set_xlabel("Frequency (rad/s)")
+# axes_sys[0, 1].set_ylabel("Magnitude (dB)")
+# axes_sys[0, 1].legend(fontsize=9)
+# axes_sys[0, 1].grid(True, which="both", alpha=0.4)
 
-    # # Bode – phase
-    # axes_sys[1, 0].semilogx(omega_out, phase_deg, "r-", linewidth=2)
-    # axes_sys[1, 0].axhline(-180, color="k", linestyle="--", alpha=0.5, label="−180°")
-    # axes_sys[1, 0].set_title("Bode – Phase")
-    # axes_sys[1, 0].set_xlabel("Frequency (rad/s)")
-    # axes_sys[1, 0].set_ylabel("Phase (deg)")
-    # axes_sys[1, 0].legend(fontsize=9)
-    # axes_sys[1, 0].grid(True, which="both", alpha=0.4)
+# # Bode – phase
+# axes_sys[1, 0].semilogx(omega_out, phase_deg, "r-", linewidth=2)
+# axes_sys[1, 0].axhline(-180, color="k", linestyle="--", alpha=0.5, label="−180°")
+# axes_sys[1, 0].set_title("Bode – Phase")
+# axes_sys[1, 0].set_xlabel("Frequency (rad/s)")
+# axes_sys[1, 0].set_ylabel("Phase (deg)")
+# axes_sys[1, 0].legend(fontsize=9)
+# axes_sys[1, 0].grid(True, which="both", alpha=0.4)
 
-    # # Pole-zero map  (closed-loop poles only; no explicit zeros for ss(A_cl,B,C,0))
-    # poles = np.linalg.eigvals(closedLoopStatesMatrix_Acl_matrixFloat)
-    # axes_sys[1, 1].axvline(0, color="k", linewidth=0.8, alpha=0.4)
-    # axes_sys[1, 1].axhline(0, color="k", linewidth=0.8, alpha=0.4)
-    # axes_sys[1, 1].scatter(
-    #     np.real(poles),
-    #     np.imag(poles),
-    #     marker="x",
-    #     s=120,
-    #     linewidths=2,
-    #     color="red",
-    #     zorder=5,
-    #     label="Poles",
-    # )
-    # for p in poles:
-    #     axes_sys[1, 1].annotate(
-    #         f"({p.real:.2f}{p.imag:+.2f}j)",
-    #         xy=(p.real, p.imag),
-    #         xytext=(6, 6),
-    #         textcoords="offset points",
-    #         fontsize=7,
-    #     )
-    # axes_sys[1, 1].set_title("Pole-Zero Map")
-    # axes_sys[1, 1].set_xlabel("Real")
-    # axes_sys[1, 1].set_ylabel("Imaginary")
-    # axes_sys[1, 1].legend()
-    # axes_sys[1, 1].grid(True, alpha=0.4)
+# # Pole-zero map  (closed-loop poles only; no explicit zeros for ss(A_cl,B,C,0))
+# poles = np.linalg.eigvals(closedLoopStatesMatrix_Acl_matrixFloat)
+# axes_sys[1, 1].axvline(0, color="k", linewidth=0.8, alpha=0.4)
+# axes_sys[1, 1].axhline(0, color="k", linewidth=0.8, alpha=0.4)
+# axes_sys[1, 1].scatter(
+#     np.real(poles),
+#     np.imag(poles),
+#     marker="x",
+#     s=120,
+#     linewidths=2,
+#     color="red",
+#     zorder=5,
+#     label="Poles",
+# )
+# for p in poles:
+#     axes_sys[1, 1].annotate(
+#         f"({p.real:.2f}{p.imag:+.2f}j)",
+#         xy=(p.real, p.imag),
+#         xytext=(6, 6),
+#         textcoords="offset points",
+#         fontsize=7,
+#     )
+# axes_sys[1, 1].set_title("Pole-Zero Map")
+# axes_sys[1, 1].set_xlabel("Real")
+# axes_sys[1, 1].set_ylabel("Imaginary")
+# axes_sys[1, 1].legend()
+# axes_sys[1, 1].grid(True, alpha=0.4)
 
-    # plt.tight_layout()
-    # # plt.savefig("lqr_optimal_system.png", dpi=150, bbox_inches="tight")
-    # # print("Saved: lqr_optimal_system.png")
+# plt.tight_layout()
+# # plt.savefig("lqr_optimal_system.png", dpi=150, bbox_inches="tight")
+# # print("Saved: lqr_optimal_system.png")
 
-    # plt.show()
-    # # DEBUG
+# plt.show()
+# # DEBUG

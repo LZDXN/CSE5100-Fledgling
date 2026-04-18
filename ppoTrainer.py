@@ -53,10 +53,10 @@ class PPOTrainer:
         critic,
         # TODO: Write arug pass through and change these parameters in config file
         lr=3e-4,
-        gamma=0.99,         # γ: discount factor for future rewards
-        lam=0.95,           # λ: GAE bias-variance trade-off (0 = TD, 1 = MC)
-        clipEps=0.2,        # ε: PPO-clip radius — limits how far π_θ moves from π_θ_old
-        valueCoeff=0.5,     # c_1: weight of value loss in the combined objective
+        gamma=0.99,  # γ: discount factor for future rewards
+        lam=0.95,  # λ: GAE bias-variance trade-off (0 = TD, 1 = MC)
+        clipEps=0.2,  # ε: PPO-clip radius — limits how far π_θ moves from π_θ_old
+        valueCoeff=0.5,  # c_1: weight of value loss in the combined objective
         entropyCoeff=0.01,  # c_2: weight of entropy bonus (encourages exploration)
         nEpochs=10,
         miniBatchSize=64,
@@ -71,12 +71,12 @@ class PPOTrainer:
         self.nEpochs = nEpochs
         self.miniBatchSize = miniBatchSize
 
-        self.actorOpt  = Adam(actor.parameters(),  lr=lr)
+        self.actorOpt = Adam(actor.parameters(), lr=lr)
         self.criticOpt = Adam(critic.parameters(), lr=lr)
 
     def _computeGae(self, buffer):
         # ── Generalized Advantage Estimation (GAE-λ) ────────────────────────
-        #s
+        # s
         # TD residual (one-step Bellman error):
         #   δ_t = r_t + γ · V(s_{t+1}) · (1 - done_t) - V(s_t)
         #
@@ -90,8 +90,8 @@ class PPOTrainer:
         #   G_t = Â_t + V(s_t)         (advantage + baseline = full return)
         # ────────────────────────────────────────────────────────────────────
         rewards = np.array(buffer.rewards)
-        values  = np.array(buffer.values)
-        dones   = np.array(buffer.dones, dtype=float)
+        values = np.array(buffer.values)
+        dones = np.array(buffer.dones, dtype=float)
         T = len(rewards)
 
         advantages = np.zeros(T)
@@ -100,7 +100,7 @@ class PPOTrainer:
         for t in reversed(range(T)):
             # V(s_{t+1}): use stored value, or bootstrap from lastValue at boundary
             nextVal = buffer.lastValue if t == T - 1 else values[t + 1]
-            nextVal *= 1.0 - dones[t]          # zero out if episode ended at t
+            nextVal *= 1.0 - dones[t]  # zero out if episode ended at t
             delta = rewards[t] + self.gamma * nextVal - values[t]
             lastAdv = delta + self.gamma * self.lam * (1.0 - dones[t]) * lastAdv
             advantages[t] = lastAdv
@@ -120,11 +120,11 @@ class PPOTrainer:
         #   Â_normalized = (Â - mean(Â)) / (std(Â) + ε)
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
-        obs_t     = torch.tensor(np.array(buffer.obs))
+        obs_t = torch.tensor(np.array(buffer.obs))
         actions_t = torch.tensor(np.array(buffer.actions))
-        oldLp_t   = torch.tensor(np.array(buffer.logProbs))
+        oldLp_t = torch.tensor(np.array(buffer.logProbs))
         returns_t = torch.tensor(returns)
-        adv_t     = torch.tensor(advantages)
+        adv_t = torch.tensor(advantages)
 
         T = len(buffer.rewards)
         indices = np.arange(T)
@@ -143,11 +143,11 @@ class PPOTrainer:
                 if len(idx) < 2:
                     continue
 
-                mbObs     = obs_t[idx]
+                mbObs = obs_t[idx]
                 mbActions = actions_t[idx]
-                mbOldLp   = oldLp_t[idx]
-                mbRet     = returns_t[idx]
-                mbAdv     = adv_t[idx]
+                mbOldLp = oldLp_t[idx]
+                mbRet = returns_t[idx]
+                mbAdv = adv_t[idx]
 
                 # ── Probability ratio ────────────────────────────────────────
                 # r_t(θ) = π_θ(a_t | s_t) / π_θ_old(a_t | s_t)
@@ -178,7 +178,11 @@ class PPOTrainer:
                 #
                 # The entropy term H encourages exploration by penalizing
                 # policies that collapse to near-deterministic distributions.
-                loss = policyLoss + self.valueCoeff * valueLoss - self.entropyCoeff * entropy.mean()
+                loss = (
+                    policyLoss
+                    + self.valueCoeff * valueLoss
+                    - self.entropyCoeff * entropy.mean()
+                )
 
                 self.actorOpt.zero_grad()
                 self.criticOpt.zero_grad()
@@ -188,7 +192,7 @@ class PPOTrainer:
                 # Project gradient onto the L2 ball of radius 0.5:
                 #   g ← g · min(1, 0.5 / ||g||)
                 # Prevents catastrophic parameter updates from gradient spikes.
-                nn.utils.clip_grad_norm_(self.actor.parameters(),  0.5)
+                nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
                 nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
 
                 self.actorOpt.step()
@@ -196,16 +200,16 @@ class PPOTrainer:
 
                 totalPLoss += policyLoss.item()
                 totalVLoss += valueLoss.item()
-                totalEnt   += entropy.mean().item()
-                nUpdates   += 1
+                totalEnt += entropy.mean().item()
+                nUpdates += 1
 
         self.actor.eval()
         self.critic.eval()
 
         n = max(nUpdates, 1)
         return {
-            "policyLoss":    totalPLoss / n,
-            "valueLoss":     totalVLoss / n,
-            "entropy":       totalEnt   / n,
+            "policyLoss": totalPLoss / n,
+            "valueLoss": totalVLoss / n,
+            "entropy": totalEnt / n,
             "meanAdvantage": float(advantages.mean()),
         }

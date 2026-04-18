@@ -4,6 +4,8 @@
 from matplotlib import pyplot as plt
 from matplotlib.gridspec import GridSpec
 import numpy as np
+import os
+
 
 # Local project libraries
 
@@ -19,7 +21,6 @@ class LivePlotter:
         self.nRotors = nRotors
         self.hoverPct = hoverPct
 
-        import os
         if saveDir is not None:
             self.plotDir = os.path.join(saveDir, "plots")
             os.makedirs(self.plotDir, exist_ok=True)
@@ -40,13 +41,15 @@ class LivePlotter:
         self.fig1.tight_layout()
 
         # -- Graph 2: altitude (top, full width) + rotor grid (bottom) --
-        self.fig2 = plt.figure(figsize=(4 * nCols, 3 * (nRows + 1)), constrained_layout=True)
+        self.fig2 = plt.figure(
+            figsize=(4 * nCols, 3 * (nRows + 1)), constrained_layout=True
+        )
         gs = GridSpec(nRows + 1, nCols, figure=self.fig2)
 
         self.axAlt = self.fig2.add_subplot(gs[0, :])
-        self.axAlt.set_title("Altitude Tracking (Eval)")
+        self.axAlt.set_title("Tracking (Eval)")
         self.axAlt.set_xlabel("Time (s)")
-        self.axAlt.set_ylabel("Altitude (m)")
+        self.axAlt.set_ylabel("Position")
         self.axAlt.grid()
 
         self.axRotors = []
@@ -66,16 +69,24 @@ class LivePlotter:
 
         plt.pause(0.01)
 
-    def update(self, batchRewards, evalTraj, zCmd):
+    def update(self, batchRewards, evalTraj, refCmd):
         # -- Reward curve --
         self.axReward.cla()
         batches = np.arange(1, len(batchRewards) + 1)
         rewards = np.array(batchRewards)
-        self.axReward.plot(batches, rewards, color="steelblue", alpha=0.4, label="reward")
+        self.axReward.plot(
+            batches, rewards, color="steelblue", alpha=0.4, label="reward"
+        )
         if len(rewards) >= 10:
-            kernel  = np.ones(10) / 10
+            kernel = np.ones(10) / 10
             rolling = np.convolve(rewards, kernel, mode="valid")
-            self.axReward.plot(batches[9:], rolling, color="steelblue", lw=2, label="rolling mean (w=10)")
+            self.axReward.plot(
+                batches[9:],
+                rolling,
+                color="steelblue",
+                lw=2,
+                label="rolling mean (w=10)",
+            )
         self.axReward.set_xlabel("Batch")
         self.axReward.set_ylabel("Mean Reward")
         self.axReward.set_title("Training Reward")
@@ -85,24 +96,34 @@ class LivePlotter:
         self.fig1.canvas.draw()
         self.fig1.canvas.flush_events()
 
-        # -- Altitude tracking --
+        # -- Position tracking --
         self.axAlt.cla()
-        self.axAlt.plot(evalTraj["time"], evalTraj["z"], color="steelblue", label="z (m)")
-        self.axAlt.axhline(zCmd, color="tomato", linestyle="--", label=f"Target {zCmd} m")
-        self.axAlt.set_title("Altitude Tracking (Eval)")
+        self.axAlt.plot(
+            evalTraj["time"], evalTraj["pos"], color="steelblue", label="pos"
+        )
+        self.axAlt.axhline(
+            refCmd, color="tomato", linestyle="--", label=f"Target {refCmd}"
+        )
+        self.axAlt.set_title("Tracking (Eval)")
         self.axAlt.set_xlabel("Time (s)")
-        self.axAlt.set_ylabel("Altitude (m)")
+        self.axAlt.set_ylabel("Position")
         self.axAlt.legend()
         self.axAlt.grid()
 
         # -- Per-rotor thrust --
-        u   = evalTraj.get("u")
-        t   = evalTraj["time"]
+        u = evalTraj.get("u")
+        t = evalTraj["time"]
         for i, ax in enumerate(self.axRotors):
             ax.cla()
             if u is not None and i < u.shape[0]:
                 ax.plot(t, u[i], color=f"C{i}")
-            ax.axhline(self.hoverPct, color="k", linestyle="--", alpha=0.5, label=f"Hover ({self.hoverPct})")
+            ax.axhline(
+                self.hoverPct,
+                color="k",
+                linestyle="--",
+                alpha=0.5,
+                label=f"Hover ({self.hoverPct})",
+            )
             ax.set_title(f"Rotor {i + 1}")
             ax.set_xlabel("Time (s)")
             ax.set_ylabel("Thrust")
@@ -118,28 +139,46 @@ class LivePlotter:
         if self.plotDir is not None:
             batchNum = len(batchRewards)
             self.fig1.savefig(
-                f"{self.plotDir}/reward_batch{batchNum:04d}.png", dpi=150, bbox_inches="tight"
+                f"{self.plotDir}/reward_batch{batchNum:04d}.png",
+                dpi=150,
+                bbox_inches="tight",
             )
             self.fig2.savefig(
-                f"{self.plotDir}/tracking_batch{batchNum:04d}.png", dpi=150, bbox_inches="tight"
+                f"{self.plotDir}/tracking_batch{batchNum:04d}.png",
+                dpi=150,
+                bbox_inches="tight",
             )
 
     def saveFinal(self):
         # Save final state of both figures with a fixed name for easy reference.
         if self.plotDir is not None:
-            self.fig1.savefig(f"{self.plotDir}/reward_final.png",   dpi=150, bbox_inches="tight")
-            self.fig2.savefig(f"{self.plotDir}/tracking_final.png", dpi=150, bbox_inches="tight")
+            self.fig1.savefig(
+                f"{self.plotDir}/reward_final.png", dpi=150, bbox_inches="tight"
+            )
+            self.fig2.savefig(
+                f"{self.plotDir}/tracking_final.png", dpi=150, bbox_inches="tight"
+            )
+
+    def saveBest(self):
+        # Save current figure state as the best-model eval plot.
+        if self.plotDir is not None:
+            self.fig1.savefig(
+                f"{self.plotDir}/reward_best.png", dpi=150, bbox_inches="tight"
+            )
+            self.fig2.savefig(
+                f"{self.plotDir}/tracking_best.png", dpi=150, bbox_inches="tight"
+            )
 
 
 def plotStepResponse(trajectory, title, savePath):
     # 3-panel plot: altitude, velocity, control input vs time
     # Used by humanLQI and for static saves -- not live
 
-    time  = trajectory["time"]
-    z     = trajectory["z"]
-    zDot  = trajectory["z_dot"]
-    u     = trajectory.get("u", np.array([]))
-    zCmd  = trajectory.get("z_cmd", None)
+    time = trajectory["time"]
+    z = trajectory["z"]
+    zDot = trajectory["z_dot"]
+    u = trajectory.get("u", np.array([]))
+    zCmd = trajectory.get("z_cmd", None)
 
     fig, axes = plt.subplots(3, 1, figsize=(8, 8), sharex=True)
     fig.suptitle(title)
@@ -158,7 +197,7 @@ def plotStepResponse(trajectory, title, savePath):
     axes[1].grid()
 
     if len(u) > 0:
-        axes[2].plot(time[:len(u)], u, color="seagreen", label="Control input")
+        axes[2].plot(time[: len(u)], u, color="seagreen", label="Control input")
     axes[2].set_ylabel("Control input")
     axes[2].set_xlabel("Time (s)")
     axes[2].legend()
@@ -182,7 +221,13 @@ def plotLqrVsRl(lqrTraj, rlTraj, zCmd, savePath):
         ["steelblue", "seagreen"],
     ):
         ax.plot(traj["time"], traj["z"], color=color, label=label)
-        ax.axhline(zCmd, color="tomato", linestyle="--", linewidth=0.9, label=f"Target {zCmd} m")
+        ax.axhline(
+            zCmd,
+            color="tomato",
+            linestyle="--",
+            linewidth=0.9,
+            label=f"Target {zCmd} m",
+        )
         ax.set_ylabel("Altitude (m)")
         ax.set_xlabel("Time (s)")
         ax.set_title(label)
@@ -192,6 +237,7 @@ def plotLqrVsRl(lqrTraj, rlTraj, zCmd, savePath):
     fig.tight_layout()
     fig.savefig(savePath, dpi=150)
     plt.close(fig)
+
 
 # Local project libraries
 
