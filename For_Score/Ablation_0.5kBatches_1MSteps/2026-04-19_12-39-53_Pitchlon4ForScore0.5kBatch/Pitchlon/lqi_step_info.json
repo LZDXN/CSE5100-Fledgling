@@ -1,0 +1,11 @@
+{
+  "RiseTime": 1.1732413314098342,
+  "SettlingTime": 2.4333894281092854,
+  "SettlingMin": 0.9047852541504539,
+  "SettlingMax": 1.0,
+  "Overshoot": 0.0,
+  "Undershoot": 0.0,
+  "Peak": 0.9999880862474956,
+  "PeakTime": 4.301884881836059,
+  "SteadyStateValue": 1.0
+}
