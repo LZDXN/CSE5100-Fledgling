@@ -69,7 +69,7 @@ class LivePlotter:
 
         plt.pause(0.01)
 
-    def update(self, batchRewards, evalTraj, refCmd):
+    def update(self, batchRewards, evalTraj, refCmd, stepMetrics=None):
         # -- Reward curve --
         self.axReward.cla()
         batches = np.arange(1, len(batchRewards) + 1)
@@ -104,7 +104,18 @@ class LivePlotter:
         self.axAlt.axhline(
             refCmd, color="tomato", linestyle="--", label=f"Target {refCmd}"
         )
-        self.axAlt.set_title("Tracking (Eval)")
+        if stepMetrics is not None:
+            def _fmt(v):
+                return f"{v:.3f}" if not np.isnan(v) else "N/A"
+            metricsLine = (
+                f"Tr={_fmt(stepMetrics['riseTime'])}s  "
+                f"Ts={_fmt(stepMetrics['settlingTime'])}s  "
+                f"OS={stepMetrics['overshoot']:.2f}%  "
+                f"US={stepMetrics['undershoot']:.2f}%"
+            )
+            self.axAlt.set_title(f"Tracking (Eval)\n{metricsLine}")
+        else:
+            self.axAlt.set_title("Tracking (Eval)")
         self.axAlt.set_xlabel("Time (s)")
         self.axAlt.set_ylabel("Position")
         self.axAlt.legend()

@@ -22,6 +22,7 @@ def scoreFunction(
     ref=0.0,
     actions=None,
     velPenalty=0.1,
+    overshootWeight=3.0,
     rotorBalancePenalty=0.05,
     energyPenalty=0.05,
 ):
@@ -35,8 +36,11 @@ def scoreFunction(
     trackErr = state[1] - ref
     rate = state[2]
 
+    # Asymmetric position penalty: crossing past the reference costs overshootWeight× more.
+    posPenalty = (overshootWeight if trackErr > 0 else 1.0) * trackErr**2
+
     # Base return -- tracking + damping only. Uncomment to test without secondary terms.
-    return float(np.exp(-(trackErr**2 + velPenalty * rate**2)))
+    # return float(np.exp(-(posPenalty + velPenalty * rate**2)))
 
     imbalance = 0.0
     energy = 0.0
@@ -46,10 +50,52 @@ def scoreFunction(
         imbalance = float(np.dot(dev, dev))
         energy = float(np.dot(actions, actions))
 
+    # return float(
+    #     np.exp(-(trackErr**2 + velPenalty * rate**2 + rotorBalancePenalty * imbalance))
+    # )
     return float(
-        np.exp(-(trackErr**2 + velPenalty * rate**2 + rotorBalancePenalty * imbalance))
+        np.exp(
+            -(
+                trackErr**2
+                + velPenalty * rate**2
+                + rotorBalancePenalty * imbalance
+                + energyPenalty * energy
+            )
+        )
     )
-    # return float(np.exp(-(trackErr**2 + velPenalty * rate**2 + rotorBalancePenalty * imbalance + energyPenalty * energy)))
+
+
+def _fmtMetric(v):
+    return f"{v:.3f}" if not np.isnan(v) else "N/A"
+
+
+def computeStepMetrics(traj, refCmd, dt, riseThreshold=0.9, settlingBand=0.02):
+    pos = traj["pos"]
+    t = traj["time"]
+
+    riseTarget = riseThreshold * refCmd
+    riseIdxs = np.where(pos >= riseTarget)[0]
+    riseTime = t[riseIdxs[0]] if len(riseIdxs) > 0 else float("nan")
+
+    band = settlingBand * abs(refCmd)
+    outsideBand = np.where(np.abs(pos - refCmd) > band)[0]
+    settlingTime = t[outsideBand[-1]] + dt if len(outsideBand) > 0 else 0.0
+
+    overshoot = max(0.0, (np.max(pos) - refCmd) / abs(refCmd) * 100)
+
+    firstReach = riseIdxs[0] if len(riseIdxs) > 0 else len(pos)
+    undershoot = (
+        max(0.0, -np.min(pos[:firstReach]) / abs(refCmd) * 100)
+        if firstReach > 0
+        else 0.0
+    )
+
+    return {
+        "riseTime": riseTime,
+        "settlingTime": settlingTime,
+        "overshoot": overshoot,
+        "undershoot": undershoot,
+    }
 
 
 def _actionToRotorThrusts(actions, hoverPct=0.5):
@@ -73,6 +119,9 @@ def train(plant, axis, actor, critic, trainer, args, writer=None):
 
     refCmd = np.array([args.rCmd])
     x0 = np.zeros(A.shape[0])
+    # Small perturbation scale for randomized episode resets (5% of reference command).
+    # Helps the policy generalize beyond a single initial condition.
+    _icPerturbScale = 0.05 * abs(args.rCmd)
 
     saveDir = getattr(args, "saveDir", None)
     plotter = LivePlotter(nRotors=nRotors, hoverPct=hoverPct, saveDir=saveDir)
@@ -88,7 +137,7 @@ def train(plant, axis, actor, critic, trainer, args, writer=None):
 
     for batchIdx in range(args.nBatches):
         buffer = ppoTrainer.RolloutBuffer()
-        x = x0.copy()
+        x = x0 + np.random.uniform(-_icPerturbScale, _icPerturbScale, size=x0.shape)
         stepCount = 0
         done = False
         truncated = False
@@ -108,6 +157,8 @@ def train(plant, axis, actor, critic, trainer, args, writer=None):
                 xNext,
                 ref=refCmd[0],
                 actions=action,
+                velPenalty=args.velPenalty,
+                overshootWeight=args.overshootWeight,
                 rotorBalancePenalty=args.rotorBalanceCoeff,
                 energyPenalty=args.energyCoeff,
             )
@@ -139,7 +190,7 @@ def train(plant, axis, actor, critic, trainer, args, writer=None):
             x = xNext
 
             if done or truncated:
-                x = x0.copy()
+                x = x0 + np.random.uniform(-_icPerturbScale, _icPerturbScale, size=x0.shape)
                 stepCount = 0
                 done = False
                 truncated = False
@@ -172,12 +223,19 @@ def train(plant, axis, actor, critic, trainer, args, writer=None):
 
         if (batchIdx + 1) % args.evalEvery == 0:
             evalTraj = _runEval(A, B, C, E, actor, args, hoverPct, axis)
-            plotter.update(batchRewards, evalTraj, args.rCmd)
+            stepMetrics = computeStepMetrics(evalTraj, args.rCmd, args.dt)
+            plotter.update(batchRewards, evalTraj, args.rCmd, stepMetrics=stepMetrics)
 
             evalMeanReward = float(np.mean(evalTraj["rewards"]))
             evalTrackingErr = float(np.mean(np.abs(evalTraj["pos_err"])))
             print(
-                f"  [eval] meanReward={evalMeanReward:.4f}  avgTrackingErr={evalTrackingErr:.4f}  finalTrackingErr={evalTraj['pos_err'][-1].item():.4f}",
+                f"  [eval] meanReward={evalMeanReward:.4f}"
+                f"  avgTrackingErr={evalTrackingErr:.4f}"
+                f"  finalTrackingErr={evalTraj['pos_err'][-1].item():.4f}"
+                f"  Tr={_fmtMetric(stepMetrics['riseTime'])}s"
+                f"  Ts={_fmtMetric(stepMetrics['settlingTime'])}s"
+                f"  OS={stepMetrics['overshoot']:.2f}%"
+                f"  US={stepMetrics['undershoot']:.2f}%",
                 flush=True,
             )
 
@@ -185,7 +243,7 @@ def train(plant, axis, actor, critic, trainer, args, writer=None):
                 bestEvalReward = evalMeanReward
                 trainingArtifacts.saveNNCheckpoint(actor, critic, saveDir, tag="best")
                 print(
-                    f"  [best] New best eval reward={bestEvalReward:.4f} -- checkpoint saved",
+                    f"  [best] New best eval reward={bestEvalReward:.4f} -- model checkpoint saved",
                     flush=True,
                 )
 
@@ -204,12 +262,18 @@ def train(plant, axis, actor, critic, trainer, args, writer=None):
     if saveDir and os.path.exists(os.path.join(saveDir, "actor_best.pth")):
         trainingArtifacts.loadNNCheckpoint(actor, critic, saveDir, tag="best")
         bestFinalTraj = _runEval(A, B, C, E, actor, args, hoverPct, axis)
-        plotter.update(batchRewards, bestFinalTraj, args.rCmd)
+        bestMetrics = computeStepMetrics(bestFinalTraj, args.rCmd, args.dt)
+        plotter.update(batchRewards, bestFinalTraj, args.rCmd, stepMetrics=bestMetrics)
         plotter.saveBest()
+        bestTrackingErr = float(np.mean(np.abs(bestFinalTraj["pos_err"])))
         print(
             f"\n[best model eval] meanReward={float(np.mean(bestFinalTraj['rewards'])):.4f}"
-            f"  avgTrackingErr={float(np.mean(np.abs(bestFinalTraj['pos_err']))):.4f}"
-            f"  finalTrackingErr={bestFinalTraj['pos_err'][-1].item():.4f}",
+            f"  avgTrackingErr={bestTrackingErr:.4f}"
+            f"  finalTrackingErr={bestFinalTraj['pos_err'][-1].item():.4f}"
+            f"  Tr={_fmtMetric(bestMetrics['riseTime'])}s"
+            f"  Ts={_fmtMetric(bestMetrics['settlingTime'])}s"
+            f"  OS={bestMetrics['overshoot']:.2f}%"
+            f"  US={bestMetrics['undershoot']:.2f}%",
             flush=True,
         )
 
@@ -227,7 +291,7 @@ def _runEval(A, B, C, E, actor, args, hoverPct, axis):
     rewHist = []
     uHist = []
 
-    for i in range(args.nEvalSteps):
+    for i in range(args.maxSteps):
         obs = (C @ x).astype(np.float32)
         action = actor.getActionDeterministic(obs)
         u_abs = _actionToRotorThrusts(action, hoverPct)
@@ -242,6 +306,8 @@ def _runEval(A, B, C, E, actor, args, hoverPct, axis):
                 x,
                 ref=refCmd[0],
                 actions=action,
+                velPenalty=args.velPenalty,
+                overshootWeight=args.overshootWeight,
                 rotorBalancePenalty=args.rotorBalanceCoeff,
                 energyPenalty=args.energyCoeff,
             )

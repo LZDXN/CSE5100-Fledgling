@@ -1,5 +1,6 @@
 # Global libraries
 import argparse
+import json
 import time
 import os
 import numpy as np
@@ -37,19 +38,21 @@ def main():
     parser_argParser.add_argument("--n_batches", type=int, default=200)
     parser_argParser.add_argument("--batch_size", type=int, default=2048)
     parser_argParser.add_argument("--eval_every", type=int, default=20)
-    parser_argParser.add_argument("--n_eval_steps", type=int, default=500)
-    parser_argParser.add_argument("--r_cmd", type=float, default=1.0)
     parser_argParser.add_argument("--max_steps", type=int, default=500)
+    parser_argParser.add_argument("--r_cmd", type=float, default=1.0)
     parser_argParser.add_argument("--rotor_balance_coeff", type=float, default=0.05)
     parser_argParser.add_argument("--energy_coeff", type=float, default=0.05)
+    parser_argParser.add_argument("--vel_penalty", type=float, default=0.3)
     parser_argParser.add_argument("--overshoot_tol_pct", type=float, default=0.1)
+    parser_argParser.add_argument("--overshoot_weight", type=float, default=3.0)
+    parser_argParser.add_argument("--hidden_dim", type=int, default=64)
 
     # PPO
     parser_argParser.add_argument("--lr", type=float, default=3e-4)
     parser_argParser.add_argument("--gamma", type=float, default=0.99)
     parser_argParser.add_argument("--lam", type=float, default=0.95)
     parser_argParser.add_argument("--clip_eps", type=float, default=0.2)
-    parser_argParser.add_argument("--n_epochs", type=int, default=10)
+    parser_argParser.add_argument("--n_epochs", type=int, default=5)
     parser_argParser.add_argument("--entropy_coeff", type=float, default=0.01)
 
     args_namespace = parser_argParser.parse_args()
@@ -58,12 +61,14 @@ def main():
     args_namespace.nBatches = args_namespace.n_batches
     args_namespace.batchSize = args_namespace.batch_size
     args_namespace.evalEvery = args_namespace.eval_every
-    args_namespace.nEvalSteps = args_namespace.n_eval_steps
     args_namespace.rCmd = args_namespace.r_cmd
     args_namespace.maxSteps = args_namespace.max_steps
     args_namespace.overshootTolPct = args_namespace.overshoot_tol_pct
     args_namespace.rotorBalanceCoeff = args_namespace.rotor_balance_coeff
     args_namespace.energyCoeff = args_namespace.energy_coeff
+    args_namespace.velPenalty = args_namespace.vel_penalty
+    args_namespace.overshootWeight = args_namespace.overshoot_weight
+    args_namespace.hiddenDim = args_namespace.hidden_dim
 
     dataPath_str = os.path.join(
         os.path.dirname(os.path.realpath(__file__)), args_namespace.data_path
@@ -76,6 +81,9 @@ def main():
     logdir_str = os.path.join(dataPath_str, logdir_str)
     if not os.path.exists(logdir_str):
         os.makedirs(logdir_str)
+
+    with open(os.path.join(logdir_str, "args.json"), "w") as f:
+        json.dump(vars(args_namespace), f, indent=2)
 
     match args_namespace.axis:
         case "pitchlon" | "PITCHLON" | "x" | "X":
@@ -108,7 +116,9 @@ def main():
         rotorCount_nr_int=args_namespace.n_rotors
     )
 
+    trainingStartTime = time.perf_counter()
     for axn, ax in enumerate(axis):
+        axisStartTime = time.perf_counter()
         axdir_str = os.path.join(logdir_str, ax_str[axn])
         args_namespace.logdir = axdir_str
         args_namespace.saveDir = axdir_str
@@ -139,9 +149,11 @@ def main():
             np.count_nonzero(plant.plantAxisHandler(axis=ax, obsIdxs=None)[2], axis=1)
         )
         actor = nnController.ActorMLP(
-            obs_dim=obsLen, action_dim=plant.rotorCount_nr_int
+            obs_dim=obsLen,
+            action_dim=plant.rotorCount_nr_int,
+            hidden=args_namespace.hiddenDim,
         )
-        critic = nnController.CriticMLP(obs_dim=obsLen)
+        critic = nnController.CriticMLP(obs_dim=obsLen, hidden=args_namespace.hiddenDim)
 
         trainer = ppoTrainer.PPOTrainer(
             actor,
@@ -158,7 +170,11 @@ def main():
         batchRewards = nnTrainingLoop.train(
             plant, ax, actor, critic, trainer, args_namespace
         )
+        axisEndTime = time.perf_counter()
+        print(f"Axis training time: {axisEndTime - axisStartTime:.1f} seconds")
 
+    trainingEndTime = time.perf_counter()
+    print(f"Total elapsed time: {trainingEndTime - trainingStartTime:.1f} seconds")
     print("\nDone.")
     # input("Press Enter to close plots...")
 
