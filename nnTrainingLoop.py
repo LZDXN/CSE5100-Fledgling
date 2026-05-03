@@ -16,6 +16,11 @@ import ppoTrainer
 import trainingArtifacts
 from utilsPlots import LivePlotter
 
+# Auxiliary-experiment hooks. Both modules expose a configurable injector that
+# is a no-op by default, so importing them does not change baseline behavior.
+from disturbance import DisturbanceConfig, DisturbanceInjector
+from observability import ObservabilityConfig, ObservationProcessor, buildRestrictedC
+
 
 def scoreFunction(
     state,
@@ -113,9 +118,30 @@ def train(plant, axis, actor, critic, trainer, args, writer=None):
     # scores with scoreFunction, and updates the network via PPOTrainer each batch.
     # Plots update live every evalEvery batches.
 
-    A, B, C, E = plant.discreteLQIPlant(plant.plantAxisHandler(axis), args.dt)
     nRotors = plant.rotorCount_nr_int
     hoverPct = plant.rotorHoverThrustPercent_fthov_float
+
+    # Pull auxiliary-experiment configuration from args.  Both default to
+    # no-op so callers that do not opt in get the original training path.
+    obsCfg = ObservabilityConfig.fromArgs(args)
+    distCfg = DisturbanceConfig.fromArgs(args)
+
+    # Build the per-axis (A, B, C, E).  When obsCfg restricts the rows of C,
+    # we override the plant default with a row-restricted selector.
+    fullStateDim = plant.plantAxisHandler(axis)[0].shape[0]
+    cOverride = buildRestrictedC(fullStateDim, obsCfg.keepIdxs)
+    A, B, C, E = plant.discreteLQIPlant(
+        plant.plantAxisHandler(axis, obsIdxs=cOverride), args.dt
+    )
+
+    # Per-rollout observation/disturbance processors.  Reset on every episode
+    # boundary inside the rollout loop below.
+    obsProc = ObservationProcessor(obsCfg, baseObsDim=C.shape[0])
+    distInj = DisturbanceInjector(
+        distCfg,
+        nRotors=nRotors,
+        vehicleMass=plant.vehicleMass_mv_float,
+    )
 
     refCmd = np.array([args.rCmd])
     x0 = np.zeros(A.shape[0])
@@ -126,6 +152,9 @@ def train(plant, axis, actor, critic, trainer, args, writer=None):
     saveDir = getattr(args, "saveDir", None)
     plotter = LivePlotter(nRotors=nRotors, hoverPct=hoverPct, saveDir=saveDir)
     logger = trainingArtifacts.TrainingLogger(saveDir)
+
+    if obsCfg.isActive or distCfg.isActive:
+        trainingArtifacts.saveAuxConfig(saveDir, obsCfg, distCfg)
 
     batchRewards = []
     bestEvalReward = -np.inf
@@ -141,17 +170,28 @@ def train(plant, axis, actor, critic, trainer, args, writer=None):
         stepCount = 0
         done = False
         truncated = False
+        episodeStartTime = 0.0  # seconds since current episode reset (for sinusoidal F_d)
+        obsProc.reset()
+        distInj.sampleEpisode()
 
         for step in range(args.batchSize):
-            obs = (C @ x).astype(np.float32)
+            rawObs = (C @ x).astype(np.float32)
+            obs = obsProc.process(rawObs)
 
             action, logProb = actor.getAction(obs)
             value = critic.getValue(obs)
 
             # Linear plant expects thrust *deviation* from hover (δu), not absolute thrust.
             # δu = u_abs - hoverPct  →  δu=0 at hover, B@δu=0 ↔ no net force/torque.
-            u_abs = _actionToRotorThrusts(action, hoverPct)
-            xNext = A @ x + B @ (u_abs - hoverPct) + E @ refCmd
+            actionForPlant = distInj.perturbAction(action)
+            u_abs = _actionToRotorThrusts(actionForPlant, hoverPct)
+            xNext = (
+                A @ x
+                + B @ (u_abs - hoverPct)
+                + E @ refCmd
+                + distInj.stateNoise(x.shape)
+                + distInj.forceDelta(episodeStartTime, args.dt, x.shape)
+            )
 
             reward = scoreFunction(
                 xNext,
@@ -188,14 +228,19 @@ def train(plant, axis, actor, critic, trainer, args, writer=None):
             buffer.store(obs, action, reward, logProb, value, done or truncated)
 
             x = xNext
+            episodeStartTime += args.dt
 
             if done or truncated:
                 x = x0 + np.random.uniform(-_icPerturbScale, _icPerturbScale, size=x0.shape)
                 stepCount = 0
                 done = False
                 truncated = False
+                episodeStartTime = 0.0
+                obsProc.reset()
+                distInj.sampleEpisode()
 
-        lastObs = (C @ x).astype(np.float32)
+        lastRawObs = (C @ x).astype(np.float32)
+        lastObs = obsProc.process(lastRawObs)
         lastVal = 0.0 if (done or truncated) else critic.getValue(lastObs)
         buffer.finish(lastVal)
 
@@ -222,7 +267,9 @@ def train(plant, axis, actor, critic, trainer, args, writer=None):
             writer.add_scalar("train/meanAdvantage", losses["meanAdvantage"], batchIdx)
 
         if (batchIdx + 1) % args.evalEvery == 0:
-            evalTraj = _runEval(A, B, C, E, actor, args, hoverPct, axis)
+            evalTraj = _runEval(
+                A, B, C, E, actor, args, hoverPct, axis, obsCfg=obsCfg
+            )
             stepMetrics = computeStepMetrics(evalTraj, args.rCmd, args.dt)
             plotter.update(batchRewards, evalTraj, args.rCmd, stepMetrics=stepMetrics)
 
@@ -261,7 +308,9 @@ def train(plant, axis, actor, critic, trainer, args, writer=None):
 
     if saveDir and os.path.exists(os.path.join(saveDir, "actor_best.pth")):
         trainingArtifacts.loadNNCheckpoint(actor, critic, saveDir, tag="best")
-        bestFinalTraj = _runEval(A, B, C, E, actor, args, hoverPct, axis)
+        bestFinalTraj = _runEval(
+            A, B, C, E, actor, args, hoverPct, axis, obsCfg=obsCfg
+        )
         bestMetrics = computeStepMetrics(bestFinalTraj, args.rCmd, args.dt)
         plotter.update(batchRewards, bestFinalTraj, args.rCmd, stepMetrics=bestMetrics)
         plotter.saveBest()
@@ -297,9 +346,23 @@ def train(plant, axis, actor, critic, trainer, args, writer=None):
     return batchRewards
 
 
-def _runEval(A, B, C, E, actor, args, hoverPct, axis):
+def _runEval(A, B, C, E, actor, args, hoverPct, axis, obsCfg=None, distInjector=None):
+    # obsCfg: ObservabilityConfig used at training time (frame-stack, masking,
+    #         delay, noise) -- mirrored at eval so the actor sees an obs of
+    #         the same shape it was trained on.
+    # distInjector: optional DisturbanceInjector for evaluating a clean-trained
+    #         policy under a noisy/disturbed environment (the off-diagonal
+    #         cells of the 2x2 train-eval ablation in Section 5.3).
     refCmd = np.array([args.rCmd])
     x = np.zeros(A.shape[0])
+
+    obsProc = ObservationProcessor(
+        obsCfg if obsCfg is not None else ObservabilityConfig(),
+        baseObsDim=C.shape[0],
+    )
+    obsProc.reset()
+    if distInjector is not None:
+        distInjector.sampleEpisode()
 
     timeHist = []
     posHist = []
@@ -309,10 +372,20 @@ def _runEval(A, B, C, E, actor, args, hoverPct, axis):
     uHist = []
 
     for i in range(args.maxSteps):
-        obs = (C @ x).astype(np.float32)
+        rawObs = (C @ x).astype(np.float32)
+        obs = obsProc.process(rawObs)
         action = actor.getActionDeterministic(obs)
-        u_abs = _actionToRotorThrusts(action, hoverPct)
+        actionForPlant = (
+            distInjector.perturbAction(action) if distInjector is not None else action
+        )
+        u_abs = _actionToRotorThrusts(actionForPlant, hoverPct)
         x = A @ x + B @ (u_abs - hoverPct) + E @ refCmd
+        if distInjector is not None:
+            x = (
+                x
+                + distInjector.stateNoise(x.shape)
+                + distInjector.forceDelta(i * args.dt, args.dt, x.shape)
+            )
 
         timeHist.append(i * args.dt)
         posHist.append(x[1])

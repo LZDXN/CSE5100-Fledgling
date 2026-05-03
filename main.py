@@ -18,6 +18,7 @@ import nnController
 import humanLQI
 import nnTrainingLoop
 import ppoTrainer
+import observability
 
 
 def main():
@@ -58,6 +59,54 @@ def main():
     parser_argParser.add_argument("--clip_eps", type=float, default=0.2)
     parser_argParser.add_argument("--n_epochs", type=int, default=5)
     parser_argParser.add_argument("--entropy_coeff", type=float, default=0.01)
+
+    # ----- Auxiliary-experiment knobs (Section 5.3 robustness, 5.4 partial obs) -----
+    # All default to no-op so omitting them reproduces the baseline pipeline.
+    parser_argParser.add_argument(
+        "--enable_process_noise",
+        action="store_true",
+        help="Inject state-side process noise (Peng et al. 2018 dynamics randomization).",
+    )
+    parser_argParser.add_argument(
+        "--enable_actuator_noise",
+        action="store_true",
+        help="Inject Gaussian per-rotor actuator noise (Chen et al. 2025 ESC jitter analog).",
+    )
+    parser_argParser.add_argument(
+        "--enable_force_disturbance",
+        action="store_true",
+        help="Inject external sinusoidal force disturbance (wind-gust analog, Wang et al. 2021).",
+    )
+    parser_argParser.add_argument(
+        "--rotor_failure_prob",
+        type=float,
+        default=0.0,
+        help="Probability of zeroing one rotor at episode start (Sharma et al. 2021).",
+    )
+    parser_argParser.add_argument(
+        "--obs_keep_idxs",
+        type=str,
+        default="all",
+        help="Comma-separated state indices to keep in the obs (e.g. '0,2'). 'all' = full state.",
+    )
+    parser_argParser.add_argument(
+        "--obs_noise_sigma",
+        type=float,
+        default=0.0,
+        help="Std of additive Gaussian noise on the obs vector.",
+    )
+    parser_argParser.add_argument(
+        "--obs_delay_steps",
+        type=int,
+        default=0,
+        help="Observation delay in simulator steps.",
+    )
+    parser_argParser.add_argument(
+        "--obs_history_len",
+        type=int,
+        default=1,
+        help="Frame-stack length for the observation passed to the actor (Mnih et al. 2015).",
+    )
 
     args_namespace = parser_argParser.parse_args()
 
@@ -145,18 +194,20 @@ def main():
                 saveDir=axdir_str,
             )
 
-        # Build NN controller and trainer
-        # Observation dimensions is up to the below for full state feedback/but for
-        # systems with limited measurement (IMU only, for example) observation
-        # dimension is nonzero rows of plant C matrix
-        # obs_dim = up to 5 for PITCHLON axis: [x_error, x, x_dot, theta, theta_dot]
-        # obs_dim = up to 5 for ROLLLAT axis: [y_error, y, y_dot, phi, phi_dot]
-        # obs_dim = up to 3 for VERT axis: [z_error, z, z_dot]
-        # obs_dim = up to 3 for YAWHDG axis: [psi_error, psi, psi_dot]
-        # obsLen = sum of nonzero rows in plant C matrix, which for full state feedback is as above
-        obsLen = np.sum(
-            np.count_nonzero(plant.plantAxisHandler(axis=ax, obsIdxs=None)[2], axis=1)
-        )
+        # Build NN controller and trainer.
+        # Observation dimension is determined jointly by:
+        #   (a) the per-axis state-vector size projected through C
+        #       (full state feedback: 3 for VERT/YAWHDG, 5 for PITCHLON/ROLLLAT)
+        #   (b) the partial-observability mask --obs_keep_idxs, which restricts
+        #       C to a subset of state rows for the Section 5.4 ablations
+        #   (c) the frame-stack length --obs_history_len, which multiplies the
+        #       per-step obs dimension when the policy sees a sliding window
+        #       of past observations (Mnih et al. 2015 frame stacking)
+        obsCfg = observability.ObservabilityConfig.fromArgs(args_namespace)
+        fullStateDim = plant.plantAxisHandler(axis=ax, obsIdxs=None)[0].shape[0]
+        cMatrix = observability.buildRestrictedC(fullStateDim, obsCfg.keepIdxs)
+        baseObsLen = int(cMatrix.shape[0])
+        obsLen = baseObsLen * max(obsCfg.historyLen, 1)
         actor = nnController.ActorMLP(
             obs_dim=obsLen,
             action_dim=plant.rotorCount_nr_int,

@@ -91,6 +91,38 @@ def loadLQIModel(saveDir):
     return data["K"], data["Q"], data["R"], stepInfo
 
 
+def saveAuxConfig(saveDir, obsCfg, distCfg):
+    # Persist the auxiliary-experiment configuration so that downstream
+    # aggregation / plotting can attribute results to the right ablation cell.
+    if saveDir is None:
+        return
+    os.makedirs(saveDir, exist_ok=True)
+    payload = {
+        "observability": {
+            "keepIdxs": obsCfg.keepIdxs,
+            "obsNoiseSigma": obsCfg.obsNoiseSigma,
+            "delaySteps": obsCfg.delaySteps,
+            "historyLen": obsCfg.historyLen,
+        },
+        "disturbance": {
+            "enableProcessNoise": distCfg.enableProcessNoise,
+            "enableActuatorNoise": distCfg.enableActuatorNoise,
+            "enableForceDisturbance": distCfg.enableForceDisturbance,
+            "rotorFailureProb": distCfg.rotorFailureProb,
+            "processNoiseSigmaLogLo": distCfg.processNoiseSigmaLogLo,
+            "processNoiseSigmaLogHi": distCfg.processNoiseSigmaLogHi,
+            "actuatorNoiseSigmaLogLo": distCfg.actuatorNoiseSigmaLogLo,
+            "actuatorNoiseSigmaLogHi": distCfg.actuatorNoiseSigmaLogHi,
+            "forceAmplFracMgLo": distCfg.forceAmplFracMgLo,
+            "forceAmplFracMgHi": distCfg.forceAmplFracMgHi,
+            "forceFreqLo": distCfg.forceFreqLo,
+            "forceFreqHi": distCfg.forceFreqHi,
+        },
+    }
+    with open(os.path.join(saveDir, "aux_config.json"), "w") as f:
+        json.dump(payload, f, indent=2)
+
+
 def saveRunSummary(saveDir, summary):
     # Persist final per-axis training outcome for easy slide/table generation.
     # summary: dict of scalars (best reward, step metrics, tracking errors, etc.).
