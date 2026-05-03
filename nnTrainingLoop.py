@@ -266,8 +266,9 @@ def train(plant, axis, actor, critic, trainer, args, writer=None):
         plotter.update(batchRewards, bestFinalTraj, args.rCmd, stepMetrics=bestMetrics)
         plotter.saveBest()
         bestTrackingErr = float(np.mean(np.abs(bestFinalTraj["pos_err"])))
+        bestRewardFinal = float(np.mean(bestFinalTraj["rewards"]))
         print(
-            f"\n[best model eval] meanReward={float(np.mean(bestFinalTraj['rewards'])):.4f}"
+            f"\n[best model eval] meanReward={bestRewardFinal:.4f}"
             f"  avgTrackingErr={bestTrackingErr:.4f}"
             f"  finalTrackingErr={bestFinalTraj['pos_err'][-1].item():.4f}"
             f"  Tr={_fmtMetric(bestMetrics['riseTime'])}s"
@@ -275,6 +276,22 @@ def train(plant, axis, actor, critic, trainer, args, writer=None):
             f"  OS={bestMetrics['overshoot']:.2f}%"
             f"  US={bestMetrics['undershoot']:.2f}%",
             flush=True,
+        )
+
+        trainingArtifacts.saveRunSummary(
+            saveDir,
+            {
+                "axis": str(axis).split(".")[-1],
+                "nBatches": args.nBatches,
+                "batchSize": args.batchSize,
+                "bestEvalMeanReward": bestRewardFinal,
+                "bestAvgTrackingErr": bestTrackingErr,
+                "bestFinalTrackingErr": float(bestFinalTraj["pos_err"][-1].item()),
+                "riseTime": bestMetrics["riseTime"],
+                "settlingTime": bestMetrics["settlingTime"],
+                "overshootPct": bestMetrics["overshoot"],
+                "undershootPct": bestMetrics["undershoot"],
+            },
         )
 
     return batchRewards

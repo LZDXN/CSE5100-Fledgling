@@ -89,3 +89,21 @@ def loadLQIModel(saveDir):
     with open(os.path.join(saveDir, "lqi_step_info.json")) as f:
         stepInfo = json.load(f)
     return data["K"], data["Q"], data["R"], stepInfo
+
+
+def saveRunSummary(saveDir, summary):
+    # Persist final per-axis training outcome for easy slide/table generation.
+    # summary: dict of scalars (best reward, step metrics, tracking errors, etc.).
+    if saveDir is None:
+        return
+    os.makedirs(saveDir, exist_ok=True)
+
+    def _coerce(v):
+        if isinstance(v, (np.floating, np.integer)):
+            return float(v)
+        if isinstance(v, np.ndarray):
+            return v.tolist()
+        return v
+
+    with open(os.path.join(saveDir, "summary.json"), "w") as f:
+        json.dump({k: _coerce(v) for k, v in summary.items()}, f, indent=2)

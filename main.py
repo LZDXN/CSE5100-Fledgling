@@ -1,9 +1,11 @@
 # Global libraries
 import argparse
 import json
+import random
 import time
 import os
 import numpy as np
+import torch
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 os.environ.setdefault("OMP_NUM_THREADS", "1")
@@ -24,6 +26,8 @@ def main():
     # parser_argParser.add_argument("--exp_name", type=str, required=True)
     parser_argParser.add_argument("--exp_name", type=str, default="test")
     parser_argParser.add_argument("--no_lqr", action="store_true")
+    # -1 = unseeded (non-deterministic). Any non-negative value seeds numpy/torch/random.
+    parser_argParser.add_argument("--seed", type=int, default=-1)
 
     # Axis
     parser_argParser.add_argument("--axis", type=str, default="ALL")
@@ -56,6 +60,11 @@ def main():
     parser_argParser.add_argument("--entropy_coeff", type=float, default=0.01)
 
     args_namespace = parser_argParser.parse_args()
+
+    if args_namespace.seed >= 0:
+        random.seed(args_namespace.seed)
+        np.random.seed(args_namespace.seed)
+        torch.manual_seed(args_namespace.seed)
 
     # Map to the attribute names used in nnTrainingLoop
     args_namespace.nBatches = args_namespace.n_batches

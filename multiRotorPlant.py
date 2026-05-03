@@ -295,19 +295,18 @@ class multiRotor6DOFWithXYZPositionError_class:
         axis: axisEnum_enumClass,
         obsIdxs: np.array = None,
     ) -> tuple:
-        match axis:
-            case axisEnum_enumClass.PITCHLON:
-                axisIdxs_listInt = list(self.pitchLonIdxs_slice)
-            case axisEnum_enumClass.ROLLLAT:
-                axisIdxs_listInt = list(self.rollLatIdxs_slice)
-            case axisEnum_enumClass.VERT:
-                axisIdxs_listInt = list(self.vertIdxs_slice)
-            case axisEnum_enumClass.YAWHDG:
-                axisIdxs_listInt = list(self.yawIdxs_slice)
-            case _:
-                raise ValueError(
-                    "Invalid 6DOF Axis! Options are PITCHLON or 0, ROLLLAT or 1, VERT or 2, or YAWHDG or 3"
-                )
+        if axis == axisEnum_enumClass.PITCHLON:
+            axisIdxs_listInt = list(self.pitchLonIdxs_slice)
+        elif axis == axisEnum_enumClass.ROLLLAT:
+            axisIdxs_listInt = list(self.rollLatIdxs_slice)
+        elif axis == axisEnum_enumClass.VERT:
+            axisIdxs_listInt = list(self.vertIdxs_slice)
+        elif axis == axisEnum_enumClass.YAWHDG:
+            axisIdxs_listInt = list(self.yawIdxs_slice)
+        else:
+            raise ValueError(
+                "Invalid 6DOF Axis! Options are PITCHLON or 0, ROLLLAT or 1, VERT or 2, or YAWHDG or 3"
+            )
 
         errorAugmentedStateMatrix_Awig_matrixFloat = (
             self.ssStatesPositionFacingErrorAugmented_Apwig_matrixFloat_16x16[
