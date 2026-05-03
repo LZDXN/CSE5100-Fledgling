@@ -215,3 +215,6 @@ __marimo__/
 # Local Runs Data
 .data/*
 data/*
+
+# Local cachs macOS
+*.DS_Store
