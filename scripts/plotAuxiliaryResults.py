@@ -5,7 +5,6 @@
 import argparse
 import json
 import os
-import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -60,6 +59,18 @@ def plotTwoByTwo(twoByTwo: dict, outPath: str):
     plt.close(fig)
 
 
+def _failureCellSeries(failure, nRotorsList, tc, ec, metricKey):
+    # Pull (means, stds) for a single (train, eval) combination across rotor counts.
+    # Returns NaN for any cell that wasn't recorded so a partial sweep still plots.
+    means, stds = [], []
+    for n in nRotorsList:
+        cell = failure.get(f"n_rotors_{n}", {}).get(tc, {}).get(ec, {})
+        m = cell.get(metricKey, {})
+        means.append(m.get("meanAcrossSeeds", float("nan")))
+        stds.append(m.get("stdAcrossSeeds", float("nan")))
+    return means, stds
+
+
 def plotFailure(failure: dict, outPath: str):
     # Grouped bar across {n_rotors} for each train/eval combination.
     nRotorsList = sorted(int(k.split("_")[-1]) for k in failure.keys())
@@ -70,43 +81,22 @@ def plotFailure(failure: dict, outPath: str):
     width = 0.18
     x = np.arange(len(nRotorsList))
 
-    # Reward subplot
-    for i, tc in enumerate(trainConds):
-        for j, ec in enumerate(evalConds):
-            means = []
-            stds = []
-            for n in nRotorsList:
-                cell = failure[f"n_rotors_{n}"][tc][ec]
-                means.append(cell["meanReward"]["meanAcrossSeeds"])
-                stds.append(cell["meanReward"]["stdAcrossSeeds"])
-            offset = ((i * 2 + j) - 1.5) * width
-            label = f"{tc.split('_')[-1]}/{ec.replace('eval','').lower()}"
-            axes[0].bar(x + offset, means, width, yerr=stds, capsize=3, label=label)
-    axes[0].set_xticks(x)
-    axes[0].set_xticklabels([f"n={n}" for n in nRotorsList])
-    axes[0].set_ylabel("Mean eval reward")
-    axes[0].set_title("Rotor failure -- reward by config")
-    axes[0].legend(fontsize=8)
-    axes[0].grid(axis="y", alpha=0.3)
-
-    # Tracking error subplot
-    for i, tc in enumerate(trainConds):
-        for j, ec in enumerate(evalConds):
-            means = []
-            stds = []
-            for n in nRotorsList:
-                cell = failure[f"n_rotors_{n}"][tc][ec]
-                means.append(cell["avgTrackingErr"]["meanAcrossSeeds"])
-                stds.append(cell["avgTrackingErr"]["stdAcrossSeeds"])
-            offset = ((i * 2 + j) - 1.5) * width
-            label = f"{tc.split('_')[-1]}/{ec.replace('eval','').lower()}"
-            axes[1].bar(x + offset, means, width, yerr=stds, capsize=3, label=label)
-    axes[1].set_xticks(x)
-    axes[1].set_xticklabels([f"n={n}" for n in nRotorsList])
-    axes[1].set_ylabel("Mean tracking error")
-    axes[1].set_title("Rotor failure -- tracking error by config")
-    axes[1].legend(fontsize=8)
-    axes[1].grid(axis="y", alpha=0.3)
+    for axIdx, metricKey, ylabel, title in (
+        (0, "meanReward", "Mean eval reward", "Rotor failure -- reward by config"),
+        (1, "avgTrackingErr", "Mean tracking error", "Rotor failure -- tracking error by config"),
+    ):
+        for i, tc in enumerate(trainConds):
+            for j, ec in enumerate(evalConds):
+                means, stds = _failureCellSeries(failure, nRotorsList, tc, ec, metricKey)
+                offset = ((i * 2 + j) - 1.5) * width
+                label = f"{tc.split('_')[-1]}/{ec.replace('eval','').lower()}"
+                axes[axIdx].bar(x + offset, means, width, yerr=stds, capsize=3, label=label)
+        axes[axIdx].set_xticks(x)
+        axes[axIdx].set_xticklabels([f"n={n}" for n in nRotorsList])
+        axes[axIdx].set_ylabel(ylabel)
+        axes[axIdx].set_title(title)
+        axes[axIdx].legend(fontsize=8)
+        axes[axIdx].grid(axis="y", alpha=0.3)
 
     fig.tight_layout()
     fig.savefig(outPath, dpi=150)

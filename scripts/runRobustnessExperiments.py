@@ -36,9 +36,7 @@
 import argparse
 import json
 import os
-import subprocess
 import sys
-import time
 
 import numpy as np
 
@@ -46,55 +44,13 @@ import numpy as np
 _THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 _REPO_ROOT = os.path.abspath(os.path.join(_THIS_DIR, os.pardir))
 sys.path.insert(0, _REPO_ROOT)
+sys.path.insert(0, _THIS_DIR)
 
 import multiRotorPlant  # noqa: E402
 import auxEval  # noqa: E402
 from disturbance import DisturbanceConfig  # noqa: E402
-from observability import ObservabilityConfig  # noqa: E402
-
-
-def _runMain(args, runName: str, extra: list):
-    # Invoke main.py as a subprocess so each training run is fully isolated
-    # (own RNG state, own torch graph, own logger).  Returns the path to the
-    # per-axis output directory (the Vert subdirectory).
-    cmd = [
-        sys.executable,
-        os.path.join(_REPO_ROOT, "main.py"),
-        "--axis", args.axis,
-        "--no_lqr",
-        "--n_rotors", str(args.n_rotors),
-        "--n_batches", str(args.n_batches),
-        "--batch_size", str(args.batch_size),
-        "--max_steps", str(args.max_steps),
-        "--eval_every", str(max(args.n_batches // 2, 5)),
-        "--exp_name", runName,
-        "--seed", str(args.seed),
-        "--data_path", args.out_dir,
-    ] + extra
-
-    env = os.environ.copy()
-    env["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-    env.setdefault("MPLBACKEND", "Agg")
-
-    t0 = time.time()
-    print(f"[runner] {runName}: launching ...", flush=True)
-    res = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=_REPO_ROOT)
-    elapsed = time.time() - t0
-    if res.returncode != 0:
-        print(res.stdout)
-        print(res.stderr)
-        raise RuntimeError(f"main.py failed for run {runName}")
-    print(f"[runner] {runName}: done in {elapsed:.1f}s", flush=True)
-
-    # The exp_name is suffixed with timestamp; pick the most recent matching dir.
-    candidates = sorted(
-        d for d in os.listdir(args.out_dir) if d.endswith("_" + runName)
-    )
-    if not candidates:
-        raise RuntimeError(f"No run directory matched suffix _{runName}")
-    runDir = os.path.join(args.out_dir, candidates[-1])
-    axisDir = os.path.join(runDir, args.axis.capitalize())
-    return axisDir
+from observability import ObservabilityConfig  # noqa: E402  # noqa: F401
+from _runnerCommon import runMainSubprocess, aggregateOverSeeds  # noqa: E402
 
 
 def _trainCondition(args, condition: str, seed: int):
@@ -113,7 +69,7 @@ def _trainCondition(args, condition: str, seed: int):
     elif condition != "clean":
         raise ValueError(f"unknown condition {condition!r}")
     runName = f"robust_{condition}_n{args.n_rotors}_s{seed}"
-    return _runMain(args, runName, extra)
+    return runMainSubprocess(_REPO_ROOT, args, runName, extra)
 
 
 def _evalCells(args, runDir: str, plant):
@@ -176,24 +132,6 @@ def _evalFailureCells(args, runDir: str, plant):
     return out
 
 
-def _aggregateOverSeeds(perSeed: list) -> dict:
-    # perSeed is a list[dict-of-metrics], one per seed.  For each numeric
-    # metric (everything but "firstTraj"), aggregate mean across seeds and
-    # report standard deviation across seeds as the variance estimator.
-    if not perSeed:
-        return {}
-    keys = [k for k in perSeed[0] if k != "firstTraj" and k != "nEpisodes"]
-    out = {"nSeeds": len(perSeed), "nEpisodes": perSeed[0]["nEpisodes"]}
-    for k in keys:
-        means = np.array([p[k]["mean"] for p in perSeed])
-        out[k] = {
-            "meanAcrossSeeds": float(np.mean(means)),
-            "stdAcrossSeeds": float(np.std(means)),
-            "perSeedMeans": means.tolist(),
-        }
-    return out
-
-
 def runTwoByTwo(args):
     out = {}
     plant = multiRotorPlant.multiRotor6DOFWithXYZPositionError_class(
@@ -207,7 +145,7 @@ def runTwoByTwo(args):
             for evalName, metrics in cells.items():
                 perSeedByEval[evalName].append(metrics)
         out[f"train_{trainCond}"] = {
-            ev: _aggregateOverSeeds(perSeedByEval[ev]) for ev in perSeedByEval
+            ev: aggregateOverSeeds(perSeedByEval[ev]) for ev in perSeedByEval
         }
     return out
 
@@ -231,7 +169,7 @@ def runFailure(args):
                 for evalName, metrics in cells.items():
                     perSeedByEval[evalName].append(metrics)
             rotorOut[f"train_{trainCond}"] = {
-                ev: _aggregateOverSeeds(perSeedByEval[ev]) for ev in perSeedByEval
+                ev: aggregateOverSeeds(perSeedByEval[ev]) for ev in perSeedByEval
             }
         out[f"n_rotors_{nRotors}"] = rotorOut
     return out

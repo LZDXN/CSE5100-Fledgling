@@ -135,12 +135,18 @@ def train(plant, axis, actor, critic, trainer, args, writer=None):
     )
 
     # Per-rollout observation/disturbance processors.  Reset on every episode
-    # boundary inside the rollout loop below.
-    obsProc = ObservationProcessor(obsCfg, baseObsDim=C.shape[0])
+    # boundary inside the rollout loop below.  Both RNGs are derived from
+    # args.seed so a `--seed N` re-run reproduces the same disturbance trace;
+    # we offset by a constant per channel so the two streams are independent.
+    auxSeed = getattr(args, "seed", -1)
+    obsRng = np.random.default_rng(None if auxSeed < 0 else auxSeed + 101)
+    distRng = np.random.default_rng(None if auxSeed < 0 else auxSeed + 211)
+    obsProc = ObservationProcessor(obsCfg, baseObsDim=C.shape[0], rng=obsRng)
     distInj = DisturbanceInjector(
         distCfg,
         nRotors=nRotors,
         vehicleMass=plant.vehicleMass_mv_float,
+        rng=distRng,
     )
 
     refCmd = np.array([args.rCmd])
@@ -267,7 +273,7 @@ def train(plant, axis, actor, critic, trainer, args, writer=None):
             writer.add_scalar("train/meanAdvantage", losses["meanAdvantage"], batchIdx)
 
         if (batchIdx + 1) % args.evalEvery == 0:
-            evalTraj = _runEval(
+            evalTraj = runEval(
                 A, B, C, E, actor, args, hoverPct, axis, obsCfg=obsCfg
             )
             stepMetrics = computeStepMetrics(evalTraj, args.rCmd, args.dt)
@@ -308,7 +314,7 @@ def train(plant, axis, actor, critic, trainer, args, writer=None):
 
     if saveDir and os.path.exists(os.path.join(saveDir, "actor_best.pth")):
         trainingArtifacts.loadNNCheckpoint(actor, critic, saveDir, tag="best")
-        bestFinalTraj = _runEval(
+        bestFinalTraj = runEval(
             A, B, C, E, actor, args, hoverPct, axis, obsCfg=obsCfg
         )
         bestMetrics = computeStepMetrics(bestFinalTraj, args.rCmd, args.dt)
@@ -346,7 +352,10 @@ def train(plant, axis, actor, critic, trainer, args, writer=None):
     return batchRewards
 
 
-def _runEval(A, B, C, E, actor, args, hoverPct, axis, obsCfg=None, distInjector=None):
+def runEval(A, B, C, E, actor, args, hoverPct, axis, obsCfg=None, distInjector=None):
+    # Public deterministic-evaluation entry point used by the live-training
+    # callback and by the cross-condition evaluator (auxEval.evaluatePolicy).
+    #
     # obsCfg: ObservabilityConfig used at training time (frame-stack, masking,
     #         delay, noise) -- mirrored at eval so the actor sees an obs of
     #         the same shape it was trained on.
@@ -356,9 +365,11 @@ def _runEval(A, B, C, E, actor, args, hoverPct, axis, obsCfg=None, distInjector=
     refCmd = np.array([args.rCmd])
     x = np.zeros(A.shape[0])
 
+    auxSeed = getattr(args, "seed", -1)
     obsProc = ObservationProcessor(
         obsCfg if obsCfg is not None else ObservabilityConfig(),
         baseObsDim=C.shape[0],
+        rng=np.random.default_rng(None if auxSeed < 0 else auxSeed + 101),
     )
     obsProc.reset()
     if distInjector is not None:
@@ -433,3 +444,7 @@ def _runEval(A, B, C, E, actor, args, hoverPct, axis, obsCfg=None, distInjector=
         # shape (nRotors, nSteps)
         "u": np.array(uHist).T,
     }
+
+
+# Backwards-compatible alias for the previous private name; prefer runEval.
+_runEval = runEval

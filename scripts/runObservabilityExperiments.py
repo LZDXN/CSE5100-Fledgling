@@ -29,56 +29,19 @@
 import argparse
 import json
 import os
-import subprocess
 import sys
-import time
 
 import numpy as np
 
 _THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 _REPO_ROOT = os.path.abspath(os.path.join(_THIS_DIR, os.pardir))
 sys.path.insert(0, _REPO_ROOT)
+sys.path.insert(0, _THIS_DIR)
 
 import multiRotorPlant  # noqa: E402
 import auxEval  # noqa: E402
 from observability import REGIME_PRESETS  # noqa: E402
-
-
-def _runMain(args, runName: str, presetExtra: list):
-    cmd = [
-        sys.executable,
-        os.path.join(_REPO_ROOT, "main.py"),
-        "--axis", args.axis,
-        "--no_lqr",
-        "--n_rotors", str(args.n_rotors),
-        "--n_batches", str(args.n_batches),
-        "--batch_size", str(args.batch_size),
-        "--max_steps", str(args.max_steps),
-        "--eval_every", str(max(args.n_batches // 2, 5)),
-        "--exp_name", runName,
-        "--seed", str(args.seed),
-        "--data_path", args.out_dir,
-    ] + presetExtra
-
-    env = os.environ.copy()
-    env["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-    env.setdefault("MPLBACKEND", "Agg")
-
-    t0 = time.time()
-    print(f"[runner] {runName}: launching ...", flush=True)
-    res = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=_REPO_ROOT)
-    elapsed = time.time() - t0
-    if res.returncode != 0:
-        print(res.stdout)
-        print(res.stderr)
-        raise RuntimeError(f"main.py failed for run {runName}")
-    print(f"[runner] {runName}: done in {elapsed:.1f}s", flush=True)
-    candidates = sorted(
-        d for d in os.listdir(args.out_dir) if d.endswith("_" + runName)
-    )
-    if not candidates:
-        raise RuntimeError(f"No run directory matched suffix _{runName}")
-    return os.path.join(args.out_dir, candidates[-1], args.axis.capitalize())
+from _runnerCommon import runMainSubprocess, aggregateOverSeeds  # noqa: E402
 
 
 def _presetToCli(preset: dict) -> list:
@@ -101,7 +64,9 @@ def runRegime(args, regimeName: str, plant) -> dict:
     for seed in args.seedList:
         local = argparse.Namespace(**vars(args))
         local.seed = seed
-        runDir = _runMain(local, f"obs_{regimeName}_n{args.n_rotors}_s{seed}", extra)
+        runDir = runMainSubprocess(
+            _REPO_ROOT, local, f"obs_{regimeName}_n{args.n_rotors}_s{seed}", extra
+        )
         # Evaluate under the same observability regime (no extra eval-time
         # noise / disturbance).  The actor's stored aux_config.json already
         # encodes the training-time obs config.
@@ -119,22 +84,7 @@ def runRegime(args, regimeName: str, plant) -> dict:
             seed=12345,
         )
         perSeed.append(metrics)
-    return _aggregateOverSeeds(perSeed)
-
-
-def _aggregateOverSeeds(perSeed: list) -> dict:
-    if not perSeed:
-        return {}
-    keys = [k for k in perSeed[0] if k != "firstTraj" and k != "nEpisodes"]
-    out = {"nSeeds": len(perSeed), "nEpisodes": perSeed[0]["nEpisodes"]}
-    for k in keys:
-        means = np.array([p[k]["mean"] for p in perSeed])
-        out[k] = {
-            "meanAcrossSeeds": float(np.mean(means)),
-            "stdAcrossSeeds": float(np.std(means)),
-            "perSeedMeans": means.tolist(),
-        }
-    return out
+    return aggregateOverSeeds(perSeed)
 
 
 def writeMarkdownSummary(out: dict, path: str):

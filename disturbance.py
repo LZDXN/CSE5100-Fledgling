@@ -29,7 +29,7 @@
 # reduces to the original noise-free training/eval path.
 
 # Global libraries
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import numpy as np
@@ -62,12 +62,11 @@ class DisturbanceConfig:
     # stored.  Translational axes (PITCHLON, ROLLLAT, VERT) all keep velocity
     # at index 2; YAWHDG keeps yaw rate at index 2.  The disturbance force
     # acts on the velocity index, scaled by 1/m * dt (Euler increment of an
-    # external acceleration over one simulator step).
+    # external acceleration over one simulator step).  For YAWHDG the
+    # increment is applied to yaw rate using the same 1/m * dt scaling rather
+    # than 1/Izz * dt; physically this is approximate but the policy still
+    # sees a generic rate-state perturbation suitable for robustness probing.
     velocityIdx: int = 2
-
-    # Rotor index that has failed for this episode (-1 means no failure).
-    # Set internally by sampleEpisode().
-    failedRotorIdx: int = field(default=-1, init=False)
 
     @classmethod
     def fromArgs(cls, args, rotorFailureProb: Optional[float] = None):

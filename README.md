@@ -173,15 +173,51 @@ This produces:
 - `robustness_failure.png`    — rotor-failure across rotor counts
 - `observability_regimes.png` — partial-observability regime comparison
 
-## 4. Reproducing the report
+## 4. Run everything as a backlog
 
-To reproduce the full Section 5.3 / 5.4 result tables at the report's stated
-protocol (3 seeds × 60 batches × 2048 steps × 4 rotors on a single axis):
+`scripts/runAllExperiments.sh` orchestrates every Section 5.x experiment
+family in sequence. It is designed for unattended overnight execution:
+all output streams to a timestamped log under `data/`, every individual
+training run is resumable (the shared subprocess helper checks for
+`summary.json` + `actor_*.pth` and skips if both exist), and one family
+failing does not abort the rest of the backlog.
 
 ```bash
-# ~30 min total on a modern laptop CPU (4 cores)
-python scripts/runRobustnessExperiments.py    --seeds 3 --n_batches 60
-python scripts/runObservabilityExperiments.py --seeds 3 --n_batches 60
+# Three pre-configured profiles
+bash scripts/runAllExperiments.sh quick     # ~1 min  -- sanity check
+bash scripts/runAllExperiments.sh medium    # ~1-2 h  -- reduced sweep (default)
+bash scripts/runAllExperiments.sh full      # ~6-9 h  -- report protocol
+```
+
+Override individual parameters via env vars:
+
+```bash
+SEEDS=3 N_BATCHES=120 ROTOR_COUNTS=4,8 \
+    bash scripts/runAllExperiments.sh medium
+```
+
+What runs (in order):
+
+| Family | Script | Purpose |
+|--------|--------|---------|
+| Section 5.2 | `runCrossConfigExperiments.py` | Train per-axis controllers across rotor counts × axes |
+| Section 5.3a | `runRobustnessExperiments.py --skip_failure` | 2×2 train/eval clean vs. noisy ablation |
+| Section 5.3b | `runRobustnessExperiments.py --skip_2x2`    | Single-rotor failure across rotor counts |
+| Section 5.4 | `runObservabilityExperiments.py` | Partial-observability regimes (full / inertial / position / noisy / delayed / stacked) |
+| Section 5.5 | `runHyperparameterSweep.py` | One-at-a-time sensitivity across 11 knobs |
+| Plots | `plotAuxiliaryResults.py` | Render aggregate bar charts |
+
+To run a single family by hand at the report's stated protocol (3 seeds ×
+60 batches × 2048 steps), invoke the runner directly — they all share the
+same `--seeds`, `--n_batches`, `--batch_size`, `--max_steps`, `--eval_episodes`
+flags and write into `data/aux_<family>/` with both a JSON aggregate and a
+`<family>_summary.md`:
+
+```bash
+python scripts/runCrossConfigExperiments.py    --seeds 3 --n_batches 60
+python scripts/runRobustnessExperiments.py     --seeds 3 --n_batches 60
+python scripts/runObservabilityExperiments.py  --seeds 3 --n_batches 60
+python scripts/runHyperparameterSweep.py       --seeds 3 --n_batches 60
 python scripts/plotAuxiliaryResults.py \
     --robustness_json    data/aux_robustness/robustness_all.json \
     --observability_json data/aux_observability/observability_results.json \

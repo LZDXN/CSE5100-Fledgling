@@ -15,7 +15,7 @@
 # Global libraries
 import json
 import os
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from types import SimpleNamespace
 from typing import Optional
 
@@ -66,7 +66,17 @@ def loadActor(runDir: str, plant, axisName: str, hiddenDim: int, tag: str = "bes
     actor = nnController.ActorMLP(
         obs_dim=obsLen, action_dim=plant.rotorCount_nr_int, hidden=hiddenDim
     )
+    # Prefer the requested tag; fall back to actor_final.pth (always written
+    # at end of training) if actor_best.pth is missing -- happens when the
+    # caller asked for a tiny run with eval_every > n_batches.
     weightPath = os.path.join(runDir, f"actor_{tag}.pth")
+    if not os.path.exists(weightPath):
+        fallback = os.path.join(runDir, "actor_final.pth")
+        if not os.path.exists(fallback):
+            raise FileNotFoundError(
+                f"Neither {weightPath} nor {fallback} exists in {runDir}"
+            )
+        weightPath = fallback
     actor.load_state_dict(torch.load(weightPath, weights_only=True))
     actor.eval()
     return actor, cMatrix, historyLen
@@ -110,19 +120,18 @@ def evaluatePolicy(
         plant.plantAxisHandler(axis=axis, obsIdxs=cMatrixTrain), dt
     )
 
+    # Build the eval-time obs config without mutating the caller's instance.
+    # historyLen MUST match training so the actor's input dim aligns; keepIdxs
+    # is forced to None because cMatrixTrain has already restricted C.
     if obsCfgEval is None:
-        # Default: same obs regime as training.
         obsCfgEval = ObservabilityConfig(
-            keepIdxs=None,  # already applied via cMatrixTrain
+            keepIdxs=None,
             obsNoiseSigma=0.0,
             delaySteps=0,
             historyLen=historyLenTrain,
         )
     else:
-        # Force history-len to match training so the actor's input dim aligns.
-        obsCfgEval.historyLen = historyLenTrain
-        # Train-time keepIdxs already restricted C; do not re-restrict here.
-        obsCfgEval.keepIdxs = None
+        obsCfgEval = replace(obsCfgEval, keepIdxs=None, historyLen=historyLenTrain)
 
     rng = np.random.default_rng(seed)
     distInjector = (
@@ -161,8 +170,10 @@ def evaluatePolicy(
 
     firstTraj = None
     for epIdx in range(nEpisodes):
-        # Re-seed disturbance per episode for variance estimation.
-        traj = nnTrainingLoop._runEval(
+        # distInjector.sampleEpisode() is invoked inside runEval, so each
+        # episode gets a fresh per-episode disturbance sample drawn from the
+        # rng we passed to the injector above.
+        traj = nnTrainingLoop.runEval(
             A,
             B,
             C,
@@ -203,7 +214,7 @@ def evaluatePolicy(
     ft_m, ft_s = _meanstd(finalTrackingErrs)
     rt_m, rt_s = _meanstd(riseTimes)
     st_m, st_s = _meanstd(settlingTimes)
-    os_m, os_s = _meanstd(overshootPcts)
+    osPct_m, osPct_s = _meanstd(overshootPcts)
     us_m, us_s = _meanstd(undershootPcts)
     ef_m, ef_s = _meanstd(integratedEffort)
 
@@ -214,7 +225,7 @@ def evaluatePolicy(
         "finalTrackingErr": {"mean": ft_m, "std": ft_s},
         "riseTime": {"mean": rt_m, "std": rt_s},
         "settlingTime": {"mean": st_m, "std": st_s},
-        "overshootPct": {"mean": os_m, "std": os_s},
+        "overshootPct": {"mean": osPct_m, "std": osPct_s},
         "undershootPct": {"mean": us_m, "std": us_s},
         "integratedEffort": {"mean": ef_m, "std": ef_s},
         "firstTraj": {
@@ -234,7 +245,6 @@ def saveEvalResult(saveDir: str, name: str, result: dict, distCfg=None, obsCfg=N
         payload["distCfg"] = {
             k: (v.tolist() if isinstance(v, np.ndarray) else v)
             for k, v in asdict(distCfg).items()
-            if k != "failedRotorIdx"
         }
     if obsCfg is not None:
         payload["obsCfg"] = asdict(obsCfg)

@@ -94,30 +94,15 @@ def loadLQIModel(saveDir):
 def saveAuxConfig(saveDir, obsCfg, distCfg):
     # Persist the auxiliary-experiment configuration so that downstream
     # aggregation / plotting can attribute results to the right ablation cell.
+    # Uses dataclasses.asdict so any field added to either config flows
+    # through automatically without needing a parallel update here.
     if saveDir is None:
         return
+    from dataclasses import asdict
     os.makedirs(saveDir, exist_ok=True)
     payload = {
-        "observability": {
-            "keepIdxs": obsCfg.keepIdxs,
-            "obsNoiseSigma": obsCfg.obsNoiseSigma,
-            "delaySteps": obsCfg.delaySteps,
-            "historyLen": obsCfg.historyLen,
-        },
-        "disturbance": {
-            "enableProcessNoise": distCfg.enableProcessNoise,
-            "enableActuatorNoise": distCfg.enableActuatorNoise,
-            "enableForceDisturbance": distCfg.enableForceDisturbance,
-            "rotorFailureProb": distCfg.rotorFailureProb,
-            "processNoiseSigmaLogLo": distCfg.processNoiseSigmaLogLo,
-            "processNoiseSigmaLogHi": distCfg.processNoiseSigmaLogHi,
-            "actuatorNoiseSigmaLogLo": distCfg.actuatorNoiseSigmaLogLo,
-            "actuatorNoiseSigmaLogHi": distCfg.actuatorNoiseSigmaLogHi,
-            "forceAmplFracMgLo": distCfg.forceAmplFracMgLo,
-            "forceAmplFracMgHi": distCfg.forceAmplFracMgHi,
-            "forceFreqLo": distCfg.forceFreqLo,
-            "forceFreqHi": distCfg.forceFreqHi,
-        },
+        "observability": asdict(obsCfg),
+        "disturbance": asdict(distCfg),
     }
     with open(os.path.join(saveDir, "aux_config.json"), "w") as f:
         json.dump(payload, f, indent=2)
